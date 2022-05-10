@@ -13,6 +13,7 @@ blarg?
 
 
 """
+from typing import List, Tuple
 
 import blessed
 import random
@@ -113,8 +114,6 @@ class Shadow:
 def draw_line(effects: list[Entity], x1: int, y1: int, x2: int, y2: int, char: str):
     # Adds a line to the effects "buffer"
     # The coords are in world space
-    #
-    # raise NotImplementedError
     rr, cc = line(y1, x1, y2, x2)
     logging.debug(f"rr: {rr}, cc: {cc}")
     for n in range(len(rr)):
@@ -173,7 +172,7 @@ def draw_octant(origin_x: int, origin_y: int, max_distance: int, octant_num: int
 
 def is_point_in_rect(px: int, py: int, room: Room) -> bool:
     """Checks if a point exists within a given room"""
-    if room[0] <= px <= room[2] and room[1] <= py <= room[3]:
+    if room.x1 <= px <= room.x2 and room.y1 <= py <= room.y2:
         logging.debug(f"Overlap checking {px},{py} vs {room}")
         return True
     else:
@@ -186,8 +185,8 @@ def is_room_intersecting_other(room: Room, other_rooms: list[Room], buffer: int 
     logging.debug(f"Beginning intersection check")
     logging.debug(f"Room: {room}. Against {len(other_rooms)} other rooms")
     for oroom in other_rooms:
-        for x in range(room[0] - buffer, room[2] + buffer + 1):
-            for y in range(room[1] - buffer, room[3] + buffer + 1):
+        for x in range(room.x1 - buffer, room.x2 + buffer + 1):
+            for y in range(room.y1 - buffer, room.y2 + buffer + 1):
                 if is_point_in_rect(x, y, oroom):
                     return True
     """
@@ -235,7 +234,7 @@ def generate_level(**kwargs):
         num_rooms = kwargs["num_rooms"]
         room_size = kwargs["room_size"]
         room_size_mod = kwargs["room_size_mod"]
-        rooms = []
+        rooms: list[Room] = []
         rooms_attempted = 0  # For now we're just going to nievely attempt to make 2 x the num rooms
 
         logging.debug(f"Numrooms: {num_rooms}")
@@ -253,7 +252,7 @@ def generate_level(**kwargs):
             room_y = random.randint(1,
                                     map_height - 2 - room_height)  # we move in by one so it doesn't touch edge of map
 
-            gen_room = (room_x, room_y, room_x + room_width - 1, room_y + room_height - 1)
+            gen_room = Room(room_x, room_y, room_x + room_width - 1, room_y + room_height - 1)
             logging.debug(f"Newly generated room {rooms_attempted}: {gen_room}. Checking to see intersections")
 
             # Now we check to see if this will intersect with any existing rooms
@@ -269,47 +268,51 @@ def generate_level(**kwargs):
         # First the rooms
         for room in rooms:
             # First the interior of the room
-            for room_x in range(room[0], room[2] + 1):
-                for room_y in range(room[1], room[3] + 1):
+            for room_x in range(room.x1, room.x2 + 1):
+                for room_y in range(room.y1, room.y2 + 1):
                     _tile = Tile(world_x=room_x, world_y=room_y, floor_char=".",
                                  is_blocking_move=False, is_blocking_LOS=False, is_visible=True)
                     level_data[room_x][room_y] = _tile
+
             # Now we put up walls around the room
             # Top and bottom first
             logging.debug(f"Contructing walls of room {room}")
-            for wall_x in range(room[0] - 1, room[2] + 2):
+            for wall_x in range(room.x1 - 1, room.x2 + 2):
                 # Top
-                logging.debug(f"Wall: {wall_x}, {room[1] - 1}")
-                _tile = Tile(world_x=wall_x, world_y=room[1] - 1, floor_char='#',
+                logging.debug(f"Wall: {wall_x}, {room.y1 - 1}")
+                _tile = Tile(world_x=wall_x, world_y=room.y1 - 1, floor_char='#',
                              is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
-                level_data[wall_x][room[1] - 1] = _tile
+                level_data[wall_x][room.y1 - 1] = _tile
+
                 # Bottom
-                logging.debug(f"Wall: {wall_x}, {room[3] + 1}")
-                _tile = Tile(world_x=wall_x, world_y=room[3] + 1, floor_char='#',
+                logging.debug(f"Wall: {wall_x}, {room.y2 + 1}")
+                _tile = Tile(world_x=wall_x, world_y=room.y2 + 1, floor_char='#',
                              is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
-                level_data[wall_x][room[3] + 1] = _tile
+                level_data[wall_x][room.y2 + 1] = _tile
+
             # Then sides
-            for wall_y in range(room[1] - 1, room[3] + 2):
+            for wall_y in range(room.y1 - 1, room.y2 + 2):
                 # Left
-                logging.debug(f"Wall: {room[0] - 1}, {wall_y}")
-                _tile = Tile(world_x=room[0] - 1, world_y=wall_y, floor_char='#',
+                logging.debug(f"Wall: {room.x1 - 1}, {wall_y}")
+                _tile = Tile(world_x=room.x1 - 1, world_y=wall_y, floor_char='#',
                              is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
-                level_data[room[0] - 1][wall_y] = _tile
+                level_data[room.x1 - 1][wall_y] = _tile
+
                 # Right
-                logging.debug(f"Wall: {room[2] + 1}, {wall_y}")
-                _tile = Tile(world_x=room[2] + 1, world_y=wall_y, floor_char='#',
+                logging.debug(f"Wall: {room.x2 + 1}, {wall_y}")
+                _tile = Tile(world_x=room.x2 + 1, world_y=wall_y, floor_char='#',
                              is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
-                level_data[room[2] + 1][wall_y] = _tile
+                level_data[room.x2 + 1][wall_y] = _tile
         for i in range(len(rooms) - 1):
             # Next we generate tiles for the hallways
             # We'll do this by picking a point in the current room, and a point in the next room
             # And connecting them with a single-bend hallway
-            starting_x = random.randint(rooms[i][0] + 1, rooms[i][2] - 1)
-            starting_y = random.randint(rooms[i][1] + 1, rooms[i][3] - 1)
+            starting_x = random.randint(rooms[i].x1 + 1, rooms[i].x2 - 1)
+            starting_y = random.randint(rooms[i].y1 + 1, rooms[i].y2 - 1)
             logging.debug(f"Starting hallway at point {starting_x}, {starting_y}")
 
-            ending_x = random.randint(rooms[i + 1][0] + 1, rooms[i + 1][2] - 1)
-            ending_y = random.randint(rooms[i + 1][1] + 1, rooms[i + 1][3] - 1)
+            ending_x = random.randint(rooms[i + 1].x1 + 1, rooms[i + 1].x2 - 1)
+            ending_y = random.randint(rooms[i + 1].y1 + 1, rooms[i + 1].y2 - 1)
             logging.debug(f"Starting hallway at point {ending_x}, {ending_y}")
 
             # Horizontal leg first
@@ -362,8 +365,8 @@ def generate_level(**kwargs):
         # Choose a valid staring spot for the player
         # We'll do this by picking a random room, and then picking a spot in that room
         player_room_num = random.randint(0, len(rooms) - 1)
-        player_start_x = random.randint(rooms[player_room_num][0], rooms[player_room_num][2])
-        player_start_y = random.randint(rooms[player_room_num][1], rooms[player_room_num][3])
+        player_start_x = random.randint(rooms[player_room_num].x1, rooms[player_room_num].x2)
+        player_start_y = random.randint(rooms[player_room_num].y1, rooms[player_room_num].y2)
         player = kwargs["player"]
         player.unchecked_place(player_start_x, player_start_y)
 
@@ -382,7 +385,8 @@ def draw_border(_term, origin_x, origin_y, box_width, box_height, border_char):
     print(border_char * box_width + _term.home)  # Adding the term.home avoids corner/scrolling issues
 
 
-def entities_in_frame(all_entities: list[Entity], cam_origin_x: int, cam_origin_y: int, cam_width: int, cam_height:int) -> list[Entity]:
+def entities_in_frame(all_entities: list[Entity], cam_origin_x: int, cam_origin_y: int, cam_width: int,
+                      cam_height: int) -> list[Entity]:
     """Returns a list of all entities that exist within the given frame of the camera"""
     # Returns a list of all of the entities that are within the frame of the camera
     # It does not check if the entities are is_visible
@@ -398,7 +402,7 @@ def entities_in_frame(all_entities: list[Entity], cam_origin_x: int, cam_origin_
     return entities
 
 
-def draw_camera(_term, cam_origin_x:int, cam_origin_y:int, cam_width:int, cam_height:int,
+def draw_camera(_term, cam_origin_x: int, cam_origin_y: int, cam_width: int, cam_height: int,
                 term_origin_x, term_origin_y, level_data, entities, effects):
     """Draws everything in the camera view"""
     # cam_origin x/y are in world-space
@@ -449,7 +453,7 @@ def update_bottom_status(_term, player: Entity, level_data: list[Tile]):
     # f"{number:02d}"
 
 
-def handle_input(key: str, level_data: list[Tile], entities: list[Entity], player: Entity, effects:list[Entity]):
+def handle_input(key: str, level_data: list[Tile], entities: list[Entity], player: Entity, effects: list[Entity]):
     # I feel like we'll need to add some level of flags to this at some point to deal with menus/etc.
     if key.is_sequence:
         key = key.name
