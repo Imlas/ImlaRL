@@ -14,7 +14,7 @@ print(f"{foo:.2f}")
 
 """
 from typing import List, Tuple
-
+import time
 import blessed
 import random
 import logging
@@ -22,12 +22,22 @@ from enum import Enum, auto
 from dataclasses import dataclass, field
 from skimage.draw import line
 
-logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.CRITICAL)
+logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
+
+
+class TermColor(Enum):
+    BLACK = (0, 0, 0)
+    DARK_GREY = (50, 50, 50)
+    MID_GREY = (96, 96, 96)
+    LIGHT_GREY = (192, 192, 192)
+    WHITE = (255, 255, 255)
+    RED = (197, 15, 31)
+    MAGENTA = (136, 23, 152)
 
 
 class Tile:
     def __init__(self, world_x: int, world_y: int, floor_char: str, is_blocking_move: bool, is_blocking_LOS: bool,
-                 is_visible, has_been_visible=False):
+                 is_visible: bool, visible_color: TermColor, fow_color: TermColor, has_been_visible: bool = False):
         self.x = world_x
         self.y = world_y
         self.char = floor_char
@@ -35,24 +45,27 @@ class Tile:
         self.is_blocking_LOS = is_blocking_LOS
         self.is_visible = is_visible
         self.has_been_visible = has_been_visible
+        self.visible_color = visible_color
+        self.fow_color = fow_color
 
 
 class EntityType(Enum):
     """Entity types"""
-    PLAYER = auto()
-    EFFECT = auto()
-    MONSTER = auto()
-    ITEM = auto()
-    STAIRS = auto()
+    PLAYER = "player"
+    EFFECT = "effect"
+    MONSTER = "monster"
+    ITEM = "item"
+    STAIRS = "stairs"
 
 
 class Entity:
-    def __init__(self, world_x: int, world_y: int, char: str, entity_type: EntityType, is_visible: bool):
+    def __init__(self, world_x: int, world_y: int, char: str, entity_type: EntityType, is_visible: bool, visible_color: TermColor):
         self.x = world_x
         self.y = world_y
         self.char = char
         self.etype = entity_type
         self.is_visible = is_visible
+        self.visible_color = visible_color
 
     def unchecked_place(self, world_x: int, world_y: int):
         # This is similar to move_to, but really only checks of x,y is positive and non-None
@@ -278,7 +291,7 @@ def refresh_octant(origin_x: int, origin_y: int, max_range: int, octant: int, le
     s_line = ShadowLine()
     full_shadow = False
 
-    logging.debug(f"Beginning an octant refresh starting at {origin_x},{origin_y}")
+    # logging.debug(f"Beginning an octant refresh starting at {origin_x},{origin_y}")
 
     # Be mindful that the row,col numbers here are in octant coordinates
     for row in range(1, max_range + 1):
@@ -323,6 +336,8 @@ def refresh_octant(origin_x: int, origin_y: int, max_range: int, octant: int, le
                 # See if this tile is visible/currently in the shadow line
                 visible = not s_line.is_in_shadow(projection)
                 level_data[x][y].is_visible = visible
+                if visible is True:
+                    level_data[x][y].has_been_visible = True
                 # logging.debug(f"Tile is vis: {visible} Blocks?: {level_data[x][y].is_blocking_LOS}")
 
                 # Add the projection to the shadow line if this tile blocks LOS
@@ -369,7 +384,7 @@ def is_room_intersecting_other(room: Room, other_rooms: list[Room], buffer: int 
     return False
 
 
-def generate_level(**kwargs) -> list[Tile]:
+def generate_level(**kwargs) -> list[list[Tile]]:
     """Generates/returns level data based on given kwargs"""
     # TODO: Huge chunks of this code can be refactored/broken into smaller methods for later use
     logging.debug(f"Beginning level generation with kwargs: {kwargs}")
@@ -383,11 +398,14 @@ def generate_level(**kwargs) -> list[Tile]:
             for y in range(0, map_height):
                 # num = (x + y) % 10
                 _tile = Tile(world_x=x, world_y=y, floor_char=".",
-                             is_blocking_move=False, is_blocking_LOS=False, is_visible=True)
+                             is_blocking_move=False, is_blocking_LOS=False, is_visible=True,
+                             visible_color=TermColor.MID_GREY, fow_color=TermColor.DARK_GREY)
                 level_data[x][y] = _tile
 
         return level_data
     elif kwargs["generation_type"] == 1:
+        # TODO: There's a lot of code repetition with the creation of walls/floors - possibly find a way to standardize that
+        #  Also it might be beneficial to instead fill with walls, and then just "carve out" floors for rooms/hallways
         # args: generation_type, height, width, room_density, room_size, room_size_mod, player
         logging.debug("level gen type 1")
         map_height = kwargs["height"]
@@ -434,23 +452,26 @@ def generate_level(**kwargs) -> list[Tile]:
             for room_x in range(room.x1, room.x2 + 1):
                 for room_y in range(room.y1, room.y2 + 1):
                     _tile = Tile(world_x=room_x, world_y=room_y, floor_char=".",
-                                 is_blocking_move=False, is_blocking_LOS=False, is_visible=True)
+                                 is_blocking_move=False, is_blocking_LOS=False, is_visible=True,
+                                 visible_color=TermColor.MID_GREY, fow_color=TermColor.DARK_GREY)
                     level_data[room_x][room_y] = _tile
 
             # Now we put up walls around the room
             # Top and bottom first
-            # logging.debug(f"Contructing walls of room {room}")
+            # logging.debug(f"Constructing walls of room {room}")
             for wall_x in range(room.x1 - 1, room.x2 + 2):
                 # Top
                 # logging.debug(f"Wall: {wall_x}, {room.y1 - 1}")
                 _tile = Tile(world_x=wall_x, world_y=room.y1 - 1, floor_char='#',
-                             is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
+                             is_blocking_move=True, is_blocking_LOS=True, is_visible=True,
+                             visible_color=TermColor.LIGHT_GREY, fow_color=TermColor.MID_GREY)
                 level_data[wall_x][room.y1 - 1] = _tile
 
                 # Bottom
                 # logging.debug(f"Wall: {wall_x}, {room.y2 + 1}")
                 _tile = Tile(world_x=wall_x, world_y=room.y2 + 1, floor_char='#',
-                             is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
+                             is_blocking_move=True, is_blocking_LOS=True, is_visible=True,
+                             visible_color=TermColor.LIGHT_GREY, fow_color=TermColor.MID_GREY)
                 level_data[wall_x][room.y2 + 1] = _tile
 
             # Then sides
@@ -458,13 +479,15 @@ def generate_level(**kwargs) -> list[Tile]:
                 # Left
                 # logging.debug(f"Wall: {room.x1 - 1}, {wall_y}")
                 _tile = Tile(world_x=room.x1 - 1, world_y=wall_y, floor_char='#',
-                             is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
+                             is_blocking_move=True, is_blocking_LOS=True, is_visible=True,
+                             visible_color=TermColor.LIGHT_GREY, fow_color=TermColor.MID_GREY)
                 level_data[room.x1 - 1][wall_y] = _tile
 
                 # Right
                 # logging.debug(f"Wall: {room.x2 + 1}, {wall_y}")
                 _tile = Tile(world_x=room.x2 + 1, world_y=wall_y, floor_char='#',
-                             is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
+                             is_blocking_move=True, is_blocking_LOS=True, is_visible=True,
+                             visible_color=TermColor.LIGHT_GREY, fow_color=TermColor.MID_GREY)
                 level_data[room.x2 + 1][wall_y] = _tile
         for i in range(len(rooms) - 1):
             # Next we generate tiles for the hallways
@@ -481,32 +504,38 @@ def generate_level(**kwargs) -> list[Tile]:
             # Horizontal leg first
             for x in range(min(starting_x, ending_x), max(starting_x, ending_x) + 1):
                 _tile = Tile(world_x=x, world_y=starting_y, floor_char=".",
-                             is_blocking_move=False, is_blocking_LOS=False, is_visible=True)
+                             is_blocking_move=False, is_blocking_LOS=False, is_visible=True,
+                             visible_color=TermColor.MID_GREY, fow_color=TermColor.DARK_GREY)
                 level_data[x][starting_y] = _tile
                 # Walls on either side if that tile isn't already assigned
                 if level_data[x][starting_y - 1] is None:
                     _tile = Tile(world_x=x, world_y=starting_y - 1, floor_char='#',
-                                 is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
+                                 is_blocking_move=True, is_blocking_LOS=True, is_visible=True,
+                                 visible_color=TermColor.LIGHT_GREY, fow_color=TermColor.MID_GREY)
                     level_data[x][starting_y - 1] = _tile
 
                 if level_data[x][starting_y + 1] is None:
                     _tile = Tile(world_x=x, world_y=starting_y + 1, floor_char='#',
-                                 is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
+                                 is_blocking_move=True, is_blocking_LOS=True, is_visible=True,
+                                 visible_color=TermColor.LIGHT_GREY, fow_color=TermColor.MID_GREY)
                     level_data[x][starting_y + 1] = _tile
 
             # Then the vertical leg
             for y in range(min(starting_y, ending_y), max(starting_y, ending_y) + 1):
                 _tile = Tile(world_x=ending_x, world_y=y, floor_char=".",
-                             is_blocking_move=False, is_blocking_LOS=False, is_visible=True)
+                             is_blocking_move=False, is_blocking_LOS=False, is_visible=True,
+                             visible_color=TermColor.MID_GREY, fow_color=TermColor.DARK_GREY)
                 level_data[ending_x][y] = _tile
                 # And then walls
                 if level_data[ending_x - 1][y] is None:
                     _tile = Tile(world_x=ending_x - 1, world_y=y, floor_char='#',
-                                 is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
+                                 is_blocking_move=True, is_blocking_LOS=True, is_visible=True,
+                                 visible_color=TermColor.LIGHT_GREY, fow_color=TermColor.MID_GREY)
                     level_data[ending_x - 1][y] = _tile
                 if level_data[ending_x + 1][y] is None:
                     _tile = Tile(world_x=ending_x + 1, world_y=y, floor_char='#',
-                                 is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
+                                 is_blocking_move=True, is_blocking_LOS=True, is_visible=True,
+                                 visible_color=TermColor.LIGHT_GREY, fow_color=TermColor.MID_GREY)
                     level_data[ending_x + 1][y] = _tile
 
             # Attempt to fill in the outside corner of the bend
@@ -522,7 +551,8 @@ def generate_level(**kwargs) -> list[Tile]:
                 x, y = ending_x + 1, starting_y + 1
             if x is not None and y is not None:
                 _tile = Tile(world_x=x, world_y=y, floor_char='#',
-                             is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
+                             is_blocking_move=True, is_blocking_LOS=True, is_visible=True,
+                             visible_color=TermColor.LIGHT_GREY, fow_color=TermColor.MID_GREY)
                 level_data[x][y] = _tile
 
         # Choose a valid staring spot for the player
@@ -578,18 +608,22 @@ def draw_camera(_term, cam_origin_x: int, cam_origin_y: int, cam_width: int, cam
             tile_char = " "
             try:
                 if cols >= 0 and rows >= 0:
-                    if level_data[cols][rows] is not None and level_data[cols][rows].is_visible:
-                        tile_char = level_data[cols][rows].char
+                    if level_data[cols][rows] is not None:
+                        if level_data[cols][rows].is_visible:
+                            tile_char = _term.color_rgb(*level_data[cols][rows].visible_color.value) + level_data[cols][rows].char
+                        elif level_data[cols][rows].has_been_visible:
+                            tile_char = _term.color_rgb(*level_data[cols][rows].fow_color.value) + level_data[cols][rows].char
             except IndexError:
                 pass
             rowstr += tile_char
-        print(_term.move_xy(term_origin_x, rows + term_origin_y - cam_origin_y) + rowstr)
+        print(_term.move_xy(term_origin_x, rows + term_origin_y - cam_origin_y) + rowstr + _term.normal)
 
     # Draw the entities
     # We'll later need to add some logic to handle two entities on
     frame_entities = entities_in_frame(entities, cam_origin_x, cam_origin_y, cam_width, cam_height)
     for ent in frame_entities:
-        print(_term.move_xy(ent.x + term_origin_x - cam_origin_x, ent.y + term_origin_y - cam_origin_y) + ent.char)
+        print(_term.move_xy(ent.x + term_origin_x - cam_origin_x, ent.y + term_origin_y - cam_origin_y)
+              + _term.color_rgb(*ent.visible_color.value) + ent.char + _term.normal)
 
     # Draw the effects
     # These are similar to entities, but they don't "exist" in the world
@@ -600,7 +634,8 @@ def draw_camera(_term, cam_origin_x: int, cam_origin_y: int, cam_width: int, cam
     # logging.debug(f"Drawing {len(frame_effects)} effects that are in-frame")
     for eff in frame_effects:
         # logging.debug(f"eff draw {eff.x},{eff.y} {eff.char}")
-        print(_term.move_xy(eff.x + term_origin_x - cam_origin_x, eff.y + term_origin_y - cam_origin_y) + eff.char)
+        print(_term.move_xy(eff.x + term_origin_x - cam_origin_x, eff.y + term_origin_y - cam_origin_y)
+              + _term.color_rgb(*eff.visible_color.value) + eff.char + _term.normal)
 
 
 def set_message(_term, message: str):
@@ -611,12 +646,13 @@ def set_message(_term, message: str):
 
 
 def update_bottom_status(_term, player: Entity, level_data: list[Tile]):
-    print(_term.move_xy(0, _term.height - 2) + "Status text like health etc")
-    print(_term.move_xy(0, _term.height - 1) + f"Player loc: {player.x:02d},{player.y:02d}" + _term.home)
+    print(_term.normal + _term.move_xy(0, _term.height - 2) + "Status text like health etc" + _term.normal)
+    print(_term.magenta_on_black + _term.move_xy(0,
+                                                 _term.height - 1) + f"Player loc: {player.x:02d},{player.y:02d}" + _term.home + _term.normal)
     # f"{number:02d}"
 
 
-def handle_input(key: str, level_data: list[Tile], entities: list[Entity], player: Entity, effects: list[Entity]):
+def handle_input(key: str, level_data: list[Tile], entities: list[Entity], player: Entity, effects: list[Entity], term):
     # I feel like we'll need to add some level of flags to this at some point to deal with menus/etc.
     if key.is_sequence:
         key = key.name
@@ -639,7 +675,8 @@ def handle_input(key: str, level_data: list[Tile], entities: list[Entity], playe
         player.move_to(player.x + 1, player.y - 1, level_data)
     elif key == 'KEY_F1':
         logging.debug("F1 pressed!")
-        refresh_visibility(player.x, player.y, 20, level_data)
+        set_message(_term=term,
+                    message=f"{term.white_on_black}White on black {term.bright_black_on_black} Bright black on black{term.normal}")
     elif key == 'KEY_F2':
         logging.debug("F2 pressed!")
 
@@ -679,9 +716,10 @@ def main():
     level_width = 20
     level_height = 20
 
-    camera_width = term.width - 2  # room for border on both sides
-    camera_height = term.height - 5  # room for border + 3 lines of status (1 on top, 2 on bottom)
-    camera_window_origin_x, camera_window_origin_y = 1, 1  # The x, y console-coords of the top-left of the camera view
+    # Should eventually make sure these update when the window is resized (if available in windows....)
+    camera_width = term.width
+    camera_height = term.height - 3
+    camera_window_origin_x, camera_window_origin_y = 0, 1  # The x, y console-coords of the top-left of the camera view
     camera_x, camera_y = 0, 0  # The x,y world-coords of the top-left of the camera
 
     level_data = []
@@ -714,40 +752,55 @@ def main():
         # draw_border(term, origin_x, origin_y, box_width, box_height, border_char)
 
         # Generate player entity
-        player = Entity(world_x=0, world_y=0, char="@", entity_type=EntityType.PLAYER, is_visible=True)
+        player = Entity(world_x=0, world_y=0, char="@", entity_type=EntityType.PLAYER,
+                        is_visible=True, visible_color=TermColor.WHITE)
         entities.append(player)
 
         # Generate level data
         # lvlargs = {"generation_type": 0, "height": 30, "width": 150}
         # args: generation_type, height, width, room_density, room_size
 
+        # tic = time.perf_counter()
         lvlargs = {"generation_type": 1, "height": 25, "width": 118,
                    "num_rooms": 20, "room_size": 9, "room_size_mod": 3, "player": player}
         level_data = generate_level(**lvlargs)
+        # toc = time.perf_counter()
+        # logging.debug(f"Level generation completed after {toc-tic:0.4f} seconds")
+
+        # logging.debug(f"Color Enum red: {TermColor.RED} {TermColor.RED.value}")
 
         while True:
             # Recalc visibility
+            tic = time.perf_counter()
             refresh_visibility(player.x, player.y, 200, level_data)
+            toc = time.perf_counter()
+            # logging.debug(f"Visibility refresh completed after {toc - tic:0.4f} seconds")
             # refresh_octant(player.x, player.y, 200, 0, level_data)
 
             # Center camera on player (as best as possible)
 
             # Draw camera contents
             # draw_camera(term, 0, 0, 25, 10, 1, 2)
-            draw_camera(_term=term, cam_origin_x=0, cam_origin_y=0, cam_width=120, cam_height=27,
-                        term_origin_x=0, term_origin_y=1, level_data=level_data, entities=entities, effects=effects)
+            draw_camera(_term=term, cam_origin_x=camera_x, cam_origin_y=camera_y, cam_width=camera_width,
+                        cam_height=camera_height,
+                        term_origin_x=camera_window_origin_x, term_origin_y=camera_window_origin_y,
+                        level_data=level_data, entities=entities, effects=effects)
 
             effects = []
 
             update_bottom_status(term, player, level_data)
+
+            # test_str = "X"
+            # r, g, b = TermColor.RED.value
+            # print(term.move_xy(2, 10) + term.color_rgb(*TermColor.RED.value) + test_str + term.normal)
 
             # Wait for an input
             key_input = term.inkey()
             if key_input == 'Q':
                 break
             else:
-                handle_input(key_input, level_data, entities, player, effects)
-                set_message(_term=term, message="Message is set!")
+                handle_input(key_input, level_data, entities, player, effects, term)
+                # set_message(_term=term, message="Message is set!")
                 # player.x += 1
                 # player.y += 1
 
