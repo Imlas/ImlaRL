@@ -9,7 +9,7 @@ print(f"{foo!a}") prints out all non-ascii characters as a unicode string
 print(f"{foo!s}") calls the string conversion operater, mostly for the below ones
 print(f"{foo=:%Y-%m-%d}") The ':' operator prefaces some formatting function
 print(f"{foo:.2f}")
-blarg?
+
 
 
 """
@@ -19,7 +19,7 @@ import blessed
 import random
 import logging
 from enum import Enum, auto
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from skimage.draw import line
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
@@ -54,14 +54,14 @@ class Entity:
         self.etype = entity_type
         self.is_visible = is_visible
 
-    def unchecked_place(self, world_x, world_y):
+    def unchecked_place(self, world_x: int, world_y: int):
         # This is similar to move_to, but really only checks of x,y is positive and non-None
         if world_x is not None and world_y is not None:
             if world_x >= 0 and world_y >= 0:
                 self.x = world_x
                 self.y = world_y
 
-    def move_to(self, world_x, world_y, level_data):
+    def move_to(self, world_x: int, world_y: int, level_data: list[Tile]) -> int:
         # Returns 0 if move was successful
         # Returns 1 if move was invalid for some reason
         # Check if x,y is non-None/non-negative
@@ -91,6 +91,7 @@ class Entity:
 
 @dataclass(frozen=True)
 class Room:
+    """A dataclass to store the two points that define a rectangular room. x1,y1 is top-left, x2,y2 is bottom-right"""
     x1: int
     y1: int
     x2: int
@@ -98,17 +99,93 @@ class Room:
 
 
 @dataclass
-class ShadowLine:
-    _shadows: list
-
-    def add(self, shadow):
-        self._shadows.append(shadow)
-
-
-@dataclass
 class Shadow:
     start: float
     end: float
+
+    def contains(self, other) -> bool:
+        """Returns True if *other* is completely covered by this shadow"""
+        return self.start <= other.start and self.end >= other.end
+
+
+@dataclass
+class ShadowLine:
+    _shadows: list = field(default_factory=list)
+
+    def add(self, shadow: Shadow):
+        # Figure out where to add the new shadow in the list
+        # Shadows are sorted based on starting edge
+        # Then we see if they need to combine
+        index = 0
+        logging.debug(f"Adding new shadow {shadow.start},{shadow.end}. Total shadows {len(self._shadows)}")
+        while index < len(self._shadows):
+            if self._shadows[index].start >= shadow.start:
+                break
+            index += 1
+        logging.debug(f"Placing new shadow at index {index}")
+
+        # See if this shadow overlaps the previous shadow.
+        overlapping_previous = None
+        if index > 0 and self._shadows[index - 1].end > shadow.start:
+            overlapping_previous = self._shadows[index - 1]
+
+        # And see if it overlaps the next shadow
+        overlapping_next = None
+        if index < len(self._shadows) and self._shadows[index].start < shadow.end:
+            overlapping_next = self._shadows[index]
+
+        # Insert the new shadow, and unify it with any overlapping shadows
+        if overlapping_next is not None:
+            if overlapping_previous is not None:
+                # Overlapping on both ends, so unify one and delete the other
+                overlapping_previous.end = overlapping_next.end
+                self._shadows.remove(overlapping_next)
+            else:
+                # Only overlapping on the far edge, so move its starting edge over
+                overlapping_next.start = shadow.start
+        else:
+            if overlapping_previous is not None:
+                # Only overlaps the previous, so update its end point
+                overlapping_previous.end = shadow.end
+            else:
+                # Does not overlap on either end, so just insert it at the appropriate position
+                self._shadows.insert(index, shadow)
+
+    def is_in_shadow(self, projection: Shadow) -> bool:
+        for shadow in self._shadows:
+            if shadow.contains(projection):
+                return True
+
+        return False
+
+    def is_full_shadow(self) -> bool:
+        return len(self._shadows) == 1 and self._shadows[0].start == 0 and self._shadows[0].end == 1
+
+    @staticmethod
+    def project_tile(row: int, col: int) -> Shadow:
+        """Note that row,col are in octant coords, NOT world/terminal coords"""
+        top_left = col / (row + 2)
+        bottom_right = (col + 1) / (row + 1)
+        return Shadow(top_left, bottom_right)
+
+    """
+    def project_shadow_debug(self, max_range: int, origin_x: int, origin_y: int, level_data: list[Tile],
+                             octant_num: int = 0):
+        # Not sure yet if s_line needs to be passed in, or if we just use self for this kinda thing
+        # and then make 8 ShadowLines each pass
+
+        for row in range(0, max_range + 1):
+            for col in range(0, row + 1):
+                # Starts with a projection of every tile.
+                # If that projection is inside of the current ShadowLine, then it's not visible
+                # If the tile *is* visible, and also blocks LOS, then we add it's projection to the ShadowLine
+                projection = ShadowLine._project_tile(row, col)
+                logging.debug(f"{projection.start = }, {projection.end = }")
+                x, y = transform_octant(row + origin_x, col + origin_y, octant_num)
+                level_data[x][y].is_visible = not self.is_in_shadow(projection)
+                if level_data[x][y].is_blocking_LOS:
+                    self.add(projection)
+    """
 
 
 def draw_line(effects: list[Entity], x1: int, y1: int, x2: int, y2: int, char: str):
@@ -161,6 +238,27 @@ def generate_octant(origin_x: int, origin_y: int, max_distance: int, octant_num:
     return octant
 
 
+def transform_octant(row: int, col: int, octant_num: int) -> (int, int):
+    if octant_num == 0:
+        return col, -row
+    elif octant_num == 1:
+        return row, -col
+    elif octant_num == 2:
+        return row, col
+    elif octant_num == 3:
+        return col, row
+    elif octant_num == 4:
+        return -col, row
+    elif octant_num == 5:
+        return -row, col
+    elif octant_num == 6:
+        return -row, -col
+    elif octant_num == 7:
+        return -col, -row
+    else:
+        return None
+
+
 def draw_octant(origin_x: int, origin_y: int, max_distance: int, octant_num: int, effects: list[Entity], char: str):
     # Adds a drawing of the given octant to the effects buffer for drawing
     # This is just a debug thing
@@ -168,6 +266,53 @@ def draw_octant(origin_x: int, origin_y: int, max_distance: int, octant_num: int
     for x, y in octant:
         e = Entity(x, y, char, EntityType.EFFECT, True)
         effects.append(e)
+
+
+def refresh_visibility(origin_x: int, origin_y: int, max_range: int, level_data: list[Tile]):
+    for octant in range(8):
+        refresh_octant(origin_x, origin_y, max_range, octant, level_data)
+
+
+def refresh_octant(origin_x: int, origin_y: int, max_range: int, octant: int, level_data: list[Tile]):
+    s_line = ShadowLine()
+    full_shadow = False
+
+    logging.debug(f"Beginning an octant refresh starting at {origin_x},{origin_y}")
+
+    for row in range(1, max_range + 1):
+        logging.debug(f"{row = }")
+        for col in range(0, row + 1):
+            logging.debug(f"{col = }")
+            # I need some out of bounds check here
+            # Both for col and row to break early
+            x, y = transform_octant(row, col, octant)
+            x += origin_x
+            y += origin_y
+            logging.debug(f"-----Tile {x},{y}-----")
+
+            # For now we'll just check each tile
+            if x < 0 or y < 0 or x >= len(level_data) or y >= len(level_data[0]) or level_data[x][y] is None:
+                logging.debug("Tile not valid. breaking to next tile")
+                break
+
+            if full_shadow:
+                logging.debug(f"Shadow line is full. Setting is_visible False")
+                level_data[x][y].is_visible = False
+            else:
+                logging.debug(f"Shadow line is not full. Calcing projection")
+
+                projection = ShadowLine.project_tile(row, col)
+                logging.debug(f"{projection = }")
+                # See if this tile is visible/currently in the shadow line
+                visible = not s_line.is_in_shadow(projection)
+                level_data[x][y].is_visible = visible
+                logging.debug(f"Tile is vis: {visible}")
+
+                # Add the projection to the shadow line if this tile blocks LOS
+                if visible and level_data[x][y].is_blocking_LOS:
+                    logging.debug(f"Adding projection to shadow line")
+                    s_line.add(projection)
+                    full_shadow = s_line.is_full_shadow()
 
 
 def is_point_in_rect(px: int, py: int, room: Room) -> bool:
@@ -207,8 +352,9 @@ def is_room_intersecting_other(room: Room, other_rooms: list[Room], buffer: int 
     return False
 
 
-def generate_level(**kwargs):
+def generate_level(**kwargs) -> list[Tile]:
     """Generates/returns level data based on given kwargs"""
+    # TODO: Huge chunks of this code can be refactored/broken into smaller methods for later use
     logging.debug(f"Beginning level generation with kwargs: {kwargs}")
     if kwargs["generation_type"] == 0:
         # args: generation_type, height, width
@@ -476,28 +622,28 @@ def handle_input(key: str, level_data: list[Tile], entities: list[Entity], playe
         player.move_to(player.x + 1, player.y - 1, level_data)
     elif key == 'KEY_F1':
         logging.debug("F1 pressed!")
-        draw_octant(player.x, player.y, 5, 0, effects, "X")
+        refresh_visibility(player.x, player.y, 20, level_data)
     elif key == 'KEY_F2':
         logging.debug("F2 pressed!")
-        draw_octant(player.x, player.y, 5, 1, effects, "X")
+
     elif key == 'KEY_F3':
         logging.debug("F3 pressed!")
-        draw_octant(player.x, player.y, 5, 2, effects, "X")
+
     elif key == 'KEY_F4':
         logging.debug("F4 pressed!")
-        draw_octant(player.x, player.y, 5, 3, effects, "X")
+
     elif key == 'KEY_F5':
         logging.debug("F5 pressed!")
-        draw_octant(player.x, player.y, 5, 4, effects, "X")
+
     elif key == 'KEY_F6':
         logging.debug("F6 pressed!")
-        draw_octant(player.x, player.y, 5, 5, effects, "X")
+
     elif key == 'KEY_F7':
         logging.debug("F7 pressed!")
-        draw_octant(player.x, player.y, 5, 6, effects, "X")
+
     elif key == 'KEY_F8':
         logging.debug("F8 pressed!")
-        draw_octant(player.x, player.y, 5, 7, effects, "X")
+
     elif key == 'KEY_F9':
         logging.debug("F9 pressed!")
 
@@ -563,6 +709,10 @@ def main():
         level_data = generate_level(**lvlargs)
 
         while True:
+            # Recalc visibility
+            refresh_visibility(player.x, player.y, 200, level_data)
+            # refresh_octant(player.x, player.y, 200, 0, level_data)
+
             # Center camera on player (as best as possible)
 
             # Draw camera contents
