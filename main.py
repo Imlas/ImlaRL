@@ -22,7 +22,7 @@ from enum import Enum, auto
 from dataclasses import dataclass, field
 from skimage.draw import line
 
-logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
+logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.CRITICAL)
 
 
 class Tile:
@@ -117,12 +117,12 @@ class ShadowLine:
         # Shadows are sorted based on starting edge
         # Then we see if they need to combine
         index = 0
-        logging.debug(f"Adding new shadow {shadow.start},{shadow.end}. Total shadows {len(self._shadows)}")
+        # logging.debug(f"Adding new shadow {shadow.start},{shadow.end}. Total shadows {len(self._shadows)}")
         while index < len(self._shadows):
             if self._shadows[index].start >= shadow.start:
                 break
             index += 1
-        logging.debug(f"Placing new shadow at index {index}")
+        # logging.debug(f"Placing new shadow at index {index}")
 
         # See if this shadow overlaps the previous shadow.
         overlapping_previous = None
@@ -150,6 +150,7 @@ class ShadowLine:
             else:
                 # Does not overlap on either end, so just insert it at the appropriate position
                 self._shadows.insert(index, shadow)
+        # logging.debug(f"Shadow add finished. Shadows: {self._shadows}")
 
     def is_in_shadow(self, projection: Shadow) -> bool:
         for shadow in self._shadows:
@@ -159,7 +160,7 @@ class ShadowLine:
         return False
 
     def is_full_shadow(self) -> bool:
-        return len(self._shadows) == 1 and self._shadows[0].start == 0 and self._shadows[0].end == 1
+        return len(self._shadows) == 1 and self._shadows[0].start == 0.0 and self._shadows[0].end == 1.0
 
     @staticmethod
     def project_tile(row: int, col: int) -> Shadow:
@@ -279,38 +280,54 @@ def refresh_octant(origin_x: int, origin_y: int, max_range: int, octant: int, le
 
     logging.debug(f"Beginning an octant refresh starting at {origin_x},{origin_y}")
 
+    # Be mindful that the row,col numbers here are in octant coordinates
     for row in range(1, max_range + 1):
-        logging.debug(f"{row = }")
+        # logging.debug(f"{row = }")
+        test_x, test_y = transform_octant(row, 0, octant)
+        if (octant == 0 or octant == 7) and test_y + origin_y < 0:
+            # logging.debug(f"Breaking octant {octant} due to hitting map boundary")
+            break
+        if (octant == 3 or octant == 4) and test_y + origin_y >= len(level_data[0]):
+            # logging.debug(f"Breaking octant {octant} due to hitting map boundary")
+            break
+        if (octant == 1 or octant == 2) and test_x + origin_x >= len(level_data):
+            # logging.debug(f"Breaking octant {octant} due to hitting map boundary")
+            break
+        if (octant == 5 or octant == 6) and test_x + origin_x < 0:
+            # logging.debug(f"Breaking octant {octant} due to hitting map boundary")
+            break
+
         for col in range(0, row + 1):
-            logging.debug(f"{col = }")
+            # logging.debug(f"{col = }")
             # I need some out of bounds check here
             # Both for col and row to break early
             x, y = transform_octant(row, col, octant)
             x += origin_x
             y += origin_y
-            logging.debug(f"-----Tile {x},{y}-----")
+            # logging.debug(f"-----Tile {x},{y}-----")
 
             # For now we'll just check each tile
             if x < 0 or y < 0 or x >= len(level_data) or y >= len(level_data[0]) or level_data[x][y] is None:
-                logging.debug("Tile not valid. breaking to next tile")
-                break
+                # if level_data[x][y] is None:
+                # logging.debug("Tile not valid. breaking to next tile")
+                continue
 
             if full_shadow:
-                logging.debug(f"Shadow line is full. Setting is_visible False")
+                # logging.debug(f"Shadow line is full. Setting is_visible False")
                 level_data[x][y].is_visible = False
             else:
-                logging.debug(f"Shadow line is not full. Calcing projection")
+                # logging.debug(f"Shadow line is not full. Calcing projection")
 
                 projection = ShadowLine.project_tile(row, col)
-                logging.debug(f"{projection = }")
+                # logging.debug(f"{projection = }")
                 # See if this tile is visible/currently in the shadow line
                 visible = not s_line.is_in_shadow(projection)
                 level_data[x][y].is_visible = visible
-                logging.debug(f"Tile is vis: {visible}")
+                # logging.debug(f"Tile is vis: {visible} Blocks?: {level_data[x][y].is_blocking_LOS}")
 
                 # Add the projection to the shadow line if this tile blocks LOS
                 if visible and level_data[x][y].is_blocking_LOS:
-                    logging.debug(f"Adding projection to shadow line")
+                    # logging.debug(f"Adding projection to shadow line")
                     s_line.add(projection)
                     full_shadow = s_line.is_full_shadow()
 
@@ -318,17 +335,17 @@ def refresh_octant(origin_x: int, origin_y: int, max_range: int, octant: int, le
 def is_point_in_rect(px: int, py: int, room: Room) -> bool:
     """Checks if a point exists within a given room"""
     if room.x1 <= px <= room.x2 and room.y1 <= py <= room.y2:
-        logging.debug(f"Overlap checking {px},{py} vs {room}")
+        # logging.debug(f"Overlap checking {px},{py} vs {room}")
         return True
     else:
-        logging.debug(f"No overlap checking {px},{py} vs {room}")
+        # logging.debug(f"No overlap checking {px},{py} vs {room}")
         return False
 
 
 def is_room_intersecting_other(room: Room, other_rooms: list[Room], buffer: int = 0) -> bool:
     """Checks if any point in a given room intersects with any other room in other_rooms """
-    logging.debug(f"Beginning intersection check")
-    logging.debug(f"Room: {room}. Against {len(other_rooms)} other rooms")
+    # logging.debug(f"Beginning intersection check")
+    # logging.debug(f"Room: {room}. Against {len(other_rooms)} other rooms")
     for oroom in other_rooms:
         for x in range(room.x1 - buffer, room.x2 + buffer + 1):
             for y in range(room.y1 - buffer, room.y2 + buffer + 1):
@@ -348,7 +365,7 @@ def is_room_intersecting_other(room: Room, other_rooms: list[Room], buffer: int 
         if is_point_in_rect(room_x_max, room_y_max, oroom, 1):
             return True
     """
-    logging.debug(f"Cleared against all rooms, returning False")
+    # logging.debug(f"Cleared against all rooms, returning False")
     return False
 
 
@@ -386,8 +403,8 @@ def generate_level(**kwargs) -> list[Tile]:
         logging.debug(f"Numrooms: {num_rooms}")
 
         while rooms_attempted <= num_rooms * 2:
-            logging.debug(f"Rooms attempted: {rooms_attempted} out of {num_rooms * 2}")
-            logging.debug(f"Rooms done: {len(rooms)}")
+            # logging.debug(f"Rooms attempted: {rooms_attempted} out of {num_rooms * 2}")
+            # logging.debug(f"Rooms done: {len(rooms)}")
             if len(rooms) >= num_rooms:
                 # If we've reached enough rooms, then stop generating
                 break
@@ -399,7 +416,7 @@ def generate_level(**kwargs) -> list[Tile]:
                                     map_height - 2 - room_height)  # we move in by one so it doesn't touch edge of map
 
             gen_room = Room(room_x, room_y, room_x + room_width - 1, room_y + room_height - 1)
-            logging.debug(f"Newly generated room {rooms_attempted}: {gen_room}. Checking to see intersections")
+            # logging.debug(f"Newly generated room {rooms_attempted}: {gen_room}. Checking to see intersections")
 
             # Now we check to see if this will intersect with any existing rooms
             if is_room_intersecting_other(gen_room, rooms, buffer=1):
@@ -422,16 +439,16 @@ def generate_level(**kwargs) -> list[Tile]:
 
             # Now we put up walls around the room
             # Top and bottom first
-            logging.debug(f"Contructing walls of room {room}")
+            # logging.debug(f"Contructing walls of room {room}")
             for wall_x in range(room.x1 - 1, room.x2 + 2):
                 # Top
-                logging.debug(f"Wall: {wall_x}, {room.y1 - 1}")
+                # logging.debug(f"Wall: {wall_x}, {room.y1 - 1}")
                 _tile = Tile(world_x=wall_x, world_y=room.y1 - 1, floor_char='#',
                              is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
                 level_data[wall_x][room.y1 - 1] = _tile
 
                 # Bottom
-                logging.debug(f"Wall: {wall_x}, {room.y2 + 1}")
+                # logging.debug(f"Wall: {wall_x}, {room.y2 + 1}")
                 _tile = Tile(world_x=wall_x, world_y=room.y2 + 1, floor_char='#',
                              is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
                 level_data[wall_x][room.y2 + 1] = _tile
@@ -439,13 +456,13 @@ def generate_level(**kwargs) -> list[Tile]:
             # Then sides
             for wall_y in range(room.y1 - 1, room.y2 + 2):
                 # Left
-                logging.debug(f"Wall: {room.x1 - 1}, {wall_y}")
+                # logging.debug(f"Wall: {room.x1 - 1}, {wall_y}")
                 _tile = Tile(world_x=room.x1 - 1, world_y=wall_y, floor_char='#',
                              is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
                 level_data[room.x1 - 1][wall_y] = _tile
 
                 # Right
-                logging.debug(f"Wall: {room.x2 + 1}, {wall_y}")
+                # logging.debug(f"Wall: {room.x2 + 1}, {wall_y}")
                 _tile = Tile(world_x=room.x2 + 1, world_y=wall_y, floor_char='#',
                              is_blocking_move=True, is_blocking_LOS=True, is_visible=True)
                 level_data[room.x2 + 1][wall_y] = _tile
@@ -455,11 +472,11 @@ def generate_level(**kwargs) -> list[Tile]:
             # And connecting them with a single-bend hallway
             starting_x = random.randint(rooms[i].x1 + 1, rooms[i].x2 - 1)
             starting_y = random.randint(rooms[i].y1 + 1, rooms[i].y2 - 1)
-            logging.debug(f"Starting hallway at point {starting_x}, {starting_y}")
+            # logging.debug(f"Starting hallway at point {starting_x}, {starting_y}")
 
             ending_x = random.randint(rooms[i + 1].x1 + 1, rooms[i + 1].x2 - 1)
             ending_y = random.randint(rooms[i + 1].y1 + 1, rooms[i + 1].y2 - 1)
-            logging.debug(f"Starting hallway at point {ending_x}, {ending_y}")
+            # logging.debug(f"Starting hallway at point {ending_x}, {ending_y}")
 
             # Horizontal leg first
             for x in range(min(starting_x, ending_x), max(starting_x, ending_x) + 1):
@@ -578,11 +595,11 @@ def draw_camera(_term, cam_origin_x: int, cam_origin_y: int, cam_width: int, cam
     # These are similar to entities, but they don't "exist" in the world
     # They also go on-top of everything else
     # This is used for UI bits, and animations?
-    logging.debug(f"Num effects total: {len(effects)}")
+    # logging.debug(f"Num effects total: {len(effects)}")
     frame_effects = entities_in_frame(effects, cam_origin_x, cam_origin_y, cam_width, cam_height)
-    logging.debug(f"Drawing {len(frame_effects)} effects that are in-frame")
+    # logging.debug(f"Drawing {len(frame_effects)} effects that are in-frame")
     for eff in frame_effects:
-        logging.debug(f"eff draw {eff.x},{eff.y} {eff.char}")
+        # logging.debug(f"eff draw {eff.x},{eff.y} {eff.char}")
         print(_term.move_xy(eff.x + term_origin_x - cam_origin_x, eff.y + term_origin_y - cam_origin_y) + eff.char)
 
 
