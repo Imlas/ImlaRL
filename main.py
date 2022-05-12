@@ -33,6 +33,7 @@ class TermColor(Enum):
     WHITE = (255, 255, 255)
     RED = (197, 15, 31)
     MAGENTA = (136, 23, 152)
+    GREEN = (19, 161, 14)
 
 
 class Tile:
@@ -564,6 +565,15 @@ def generate_level(**kwargs) -> list[list[Tile]]:
         player.unchecked_place(player_start_x, player_start_y)
 
         # Populate the rooms with stuff!
+
+        # For now, let's put a single orc in a room
+        monster_room = random.randint(0, len(rooms) - 1)
+        monster_start_x = random.randint(rooms[monster_room].x1, rooms[monster_room].x2)
+        monster_start_y = random.randint(rooms[monster_room].y1, rooms[monster_room].y2)
+        monster = Entity(monster_start_x, monster_start_y, "o", EntityType.MONSTER,
+                         is_visible=True, visible_color=TermColor.GREEN)
+        # TODO need to append this to the entity list and/or return this
+
         return level_data
     else:
         return None
