@@ -2,6 +2,7 @@
 # assume a console window of 120 x 30
 # Packages installed for this: blessed, skimage
 
+# https://pypi.org/project/perlin-noise/
 """
 print(f'The value is {foo}')
 print(f"{foo = }")
@@ -16,15 +17,18 @@ print(f"{foo:.2f}")
 """
 # from typing import List, Tuple
 # import time
+from typing import TypeVar, Protocol, List, Dict, Tuple, Iterator
+
 import blessed
 # import random
 import logging
 # from enum import Enum, auto
 from dataclasses import dataclass, field
 from skimage.draw import line
+from collections import deque
 
-from levelData import TermColor, generate_level, LevelData, Entity, EntityType
-
+from levelData import TermColor, generate_level, LevelData, Entity, EntityType, breadth_first_search, dijkstra_search, \
+    reconstruct_path, a_star_search
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
 
@@ -320,10 +324,29 @@ def handle_input(key, level_data: LevelData, term):
                     message=f"{term.white_on_black}White on black {term.bright_black_on_black} Bright black on black{term.normal}")
     elif key == 'KEY_F2':
         logging.debug("F2 pressed!")
-
+        player = level_data.get_player()
+        neighbors = level_data.get_neighbors(player.x, player.y)
+        logging.debug(f"{neighbors = }")
     elif key == 'KEY_F3':
         logging.debug("F3 pressed!")
+        player = level_data.get_player()
+        for e in level_data.entities:
+            if e.etype == EntityType.MONSTER:
+                logging.debug("--Starting dijkstra search--")
+                came_from, cost_so_far = dijkstra_search(level_data, e.x, e.y, player.x, player.y)
+                logging.debug(f"{came_from = }")
+                logging.debug(f"{cost_so_far = }")
+                logging.debug(f"Cost to reach player: {cost_so_far[(player.x, player.y)]}")
+                path = reconstruct_path(came_from, e.x, e.y, player.x, player.y)
+                logging.debug(f"Path from orc to player: {path}")
 
+                logging.debug("--Starting AStar search--")
+                came_from, cost_so_far = a_star_search(level_data, e.x, e.y, player.x, player.y)
+                logging.debug(f"{came_from = }")
+                logging.debug(f"{cost_so_far = }")
+                logging.debug(f"Cost to reach player: {cost_so_far[(player.x, player.y)]}")
+                path = reconstruct_path(came_from, e.x, e.y, player.x, player.y)
+                logging.debug(f"Path from orc to player: {path}")
     elif key == 'KEY_F4':
         logging.debug("F4 pressed!")
 
