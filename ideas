@@ -1,0 +1,75 @@
+Entity as ABC
+vars:
+ name: str
+ posX: int
+ posY: int
+ char: str
+ char_color: TermColor
+ is_visible: bool
+ blocks_LOS: bool
+
+Monster(Entity)
+vars:
+ name: str
+ posX: int
+ posY: int
+ char_color: TermColor
+ is_visible: bool
+ blocks_LOS: bool
+ speed: int https://nethackwiki.com/wiki/Speed - going with the 3.4.3 method of speed/actions. 12 speed is base. Creatures gain their speed in "action points" per turn, and if their total is >= 12 then they act and subtract 12
+ speed_current: int (see above), set to 0 at init
+ health_max: float
+ health_current: float
+ armor_phys: int Need to introduce a DamageType Enum (move all enums to separate file to reduce crossing?)
+ armor_fire: int
+ armor_electric: int
+ armor_corrosive: int
+ attack_power: int
+ monster_update: function
+methods:
+ update(self, level_data: LevelData) fire off monster_update - take a turn, based on speed
+ take_damage(self, damage: float, damage_type: DamageType) # Damage multiplier = 1 - (0.06 * total armor) / (1 + 0.06 * abs(total armor))
+ move_towards(self, goal_x: int, goal_y: int)
+
+under this model, we have a few different monster_update functions
+melee_monster_update(self, level_data:LevelData)
+ranged_monster_update(self, level_data:LevelData)
+dragon_monster_update(self, level_data:LevelData)
+ # Doing it this way, we can't really store extra data, like cd on certain attacks or something. Not sure if it'll matter
+ # Actually, we might be able to, since I think we can arbitrarily store self.vars without it being init'd
+
+Item(Entity) (for stuff on the floor that can be picked up)
+vars:
+ name: str
+ posX: int
+ posY: int
+ char: str
+ char_color: TermColor
+ is_visible: bool
+ blocks_LOS: bool
+ item_type: ItemType # an enum for now? later it's own class of stuff?
+ item_amount: int # I think to start with, let's just have gold piles to pick up?
+method:
+ pick_up(self) Adds the appropriate shit to the player and removes from the entity list
+
+Interactable(Entity)
+ -similar to Monsters, it'll hold a function upon_interaction(self, level_data)?
+
+Effect(Entity) - This will be different from "vfx" stuff. More like poison clouds/fire patches
+ name: str
+ posX: int
+ posY: int
+ char: str
+ char_color: TermColor
+ is_visible: bool
+ blocks_LOS: bool
+ effect_update: function
+ duration_remaining: int (ticks down, kills itself when it reaches 0)
+methods:
+ update - ticks effect_update
+
+https://dota2.fandom.com/wiki/Armor
+armor/damage equation:
+
+
+Have an entirely separate VFX class? we'll cross that when we get there (I guess we can sometimes use Effect(Entity), just with a blank update method
