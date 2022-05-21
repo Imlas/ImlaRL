@@ -10,6 +10,7 @@ class TermColor(Enum):
     RED = (197, 15, 31)
     MAGENTA = (136, 23, 152)
     GREEN = (19, 161, 14)
+    GOLD = (255, 215, 0)
 
 
 class DamageType(Enum):
@@ -24,3 +25,8 @@ class ItemType(Enum):
     GOLD = 0
     DAGGER = 1
     SWORD = 2
+
+
+class ImlaConstants:
+    BASE_SPEED = 12
+

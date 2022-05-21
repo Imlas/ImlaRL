@@ -27,8 +27,11 @@ from dataclasses import dataclass, field
 from skimage.draw import line
 from collections import deque
 
-from levelData import TermColor, generate_level, LevelData, Entity, EntityType, breadth_first_search, dijkstra_search, \
+from entity import Player
+from globalEnums import DamageType
+from levelData import TermColor, LevelData, breadth_first_search, dijkstra_search, \
     reconstruct_path, a_star_search
+from levelGeneration import generate_level
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
 
@@ -114,9 +117,9 @@ def draw_line(level_data: LevelData, x1: int, y1: int, x2: int, y2: int, char: s
     rr, cc = line(y1, x1, y2, x2)
     logging.debug(f"rr: {rr}, cc: {cc}")
     for n in range(len(rr)):
-        e = Entity(int(cc[n]), int(rr[n]), char, EntityType.EFFECT, True, TermColor.RED)
+        # e = Entity(int(cc[n]), int(rr[n]), char, EntityType.EFFECT, True, TermColor.RED)
         logging.debug(f"Line entity at {cc[n]},{rr[n]}, {char}, {type(cc[n])}, {type(rr[n])}")
-        level_data.effects.append(e)
+        # level_data.effects.append(e)
 
 
 def transform_octant(row: int, col: int, octant_num: int) -> (int, int):
@@ -215,8 +218,8 @@ def draw_border(_term, origin_x, origin_y, box_width, box_height, border_char):
     print(border_char * box_width + _term.home)  # Adding the term.home avoids corner/scrolling issues
 
 
-def entities_in_frame(all_entities: list[Entity], cam_origin_x: int, cam_origin_y: int, cam_width: int,
-                      cam_height: int) -> list[Entity]:
+def entities_in_frame(all_entities: list, cam_origin_x: int, cam_origin_y: int, cam_width: int,
+                      cam_height: int) -> list:
     """Returns a list of all entities that exist within the given frame of the camera"""
     # Returns a list of all of the entities that are within the frame of the camera
     # It does not check if the entities are is_visible
@@ -228,7 +231,7 @@ def entities_in_frame(all_entities: list[Entity], cam_origin_x: int, cam_origin_
     min_y, max_y = cam_origin_y, cam_origin_y + cam_height
 
     for e in all_entities:
-        if min_x <= e.x <= max_x and min_y <= e.y <= max_y:
+        if min_x <= e.pos[0] <= max_x and min_y <= e.pos[1] <= max_y:
             entities.append(e)
 
     return entities
@@ -250,34 +253,53 @@ def draw_camera(_term, cam_origin_x: int, cam_origin_y: int, cam_width: int, cam
                     if level_data.tiles[cols][rows] is not None:
                         if level_data.tiles[cols][rows].is_visible:
                             tile_char = _term.color_rgb(*level_data.tiles[cols][rows].visible_color.value) + \
-                                        level_data.tiles[cols][rows].char
+                                        level_data.tiles[cols][rows].floor_char
                         elif level_data.tiles[cols][rows].has_been_visible:
                             tile_char = _term.color_rgb(*level_data.tiles[cols][rows].fow_color.value) + \
-                                        level_data.tiles[cols][rows].char
+                                        level_data.tiles[cols][rows].floor_char
             except IndexError:
                 pass
             rowstr += tile_char
         print(_term.move_xy(term_origin_x, rows + term_origin_y - cam_origin_y) + rowstr + _term.normal)
 
-    # Draw the entities
-    # We'll later need to add some logic to handle two entities on
-    frame_entities = entities_in_frame(level_data.entities, cam_origin_x, cam_origin_y, cam_width, cam_height)
-    for ent in frame_entities:
-        if level_data.tiles[ent.x][ent.y].is_visible:
-            print(_term.move_xy(ent.x + term_origin_x - cam_origin_x, ent.y + term_origin_y - cam_origin_y)
-                  + _term.color_rgb(*ent.visible_color.value) + ent.char + _term.normal)
+    # Draw the floor items
+    # We'll later need to add some logic to handle two entities on the same Tile
+    # todo break this code chunk into a separate function
+    #  code repetition is bad, m'kay?
+    frame_items = entities_in_frame(level_data.floor_items, cam_origin_x, cam_origin_y, cam_width, cam_height)
+    for ent in frame_items:
+        if level_data.tiles[ent.pos[0]][ent.pos[1]].is_visible:
+            print(_term.move_xy(ent.pos[0] + term_origin_x - cam_origin_x, ent.pos[1] + term_origin_y - cam_origin_y)
+                  + _term.color_rgb(*ent.display_color.value) + ent.display_char + _term.normal)
 
-    # Draw the effects
-    # These are similar to entities, but they don't "exist" in the world
-    # They also go on-top of everything else
-    # This is used for UI bits, and animations?
-    # logging.debug(f"Num effects total: {len(effects)}")
-    frame_effects = entities_in_frame(level_data.effects, cam_origin_x, cam_origin_y, cam_width, cam_height)
-    # logging.debug(f"Drawing {len(frame_effects)} effects that are in-frame")
-    for eff in frame_effects:
-        # logging.debug(f"eff draw {eff.x},{eff.y} {eff.char}")
-        print(_term.move_xy(eff.x + term_origin_x - cam_origin_x, eff.y + term_origin_y - cam_origin_y)
-              + _term.color_rgb(*eff.visible_color.value) + eff.char + _term.normal)
+    # Draw the monsters
+    # We'll later need to add some logic to handle two entities on the same Tile
+    frame_interactables = entities_in_frame(level_data.interactables, cam_origin_x, cam_origin_y, cam_width, cam_height)
+    for ent in frame_interactables:
+        if level_data.tiles[ent.pos[0]][ent.pos[1]].is_visible:
+            print(_term.move_xy(ent.pos[0] + term_origin_x - cam_origin_x, ent.pos[1] + term_origin_y - cam_origin_y)
+                  + _term.color_rgb(*ent.display_color.value) + ent.display_char + _term.normal)
+
+    # Draw the monsters
+    # We'll later need to add some logic to handle two entities on the same Tile
+    frame_monsters = entities_in_frame(level_data.monsters, cam_origin_x, cam_origin_y, cam_width, cam_height)
+    for ent in frame_monsters:
+        if level_data.tiles[ent.pos[0]][ent.pos[1]].is_visible:
+            print(_term.move_xy(ent.pos[0] + term_origin_x - cam_origin_x, ent.pos[1] + term_origin_y - cam_origin_y)
+                  + _term.color_rgb(*ent.display_color.value) + ent.display_char + _term.normal)
+
+    # Draw the floor effects
+    # We'll later need to add some logic to handle two entities on the same Tile
+    frame_effects = entities_in_frame(level_data.floor_effects, cam_origin_x, cam_origin_y, cam_width, cam_height)
+    for ent in frame_effects:
+        if level_data.tiles[ent.pos[0]][ent.pos[1]].is_visible:
+            print(_term.move_xy(ent.pos[0] + term_origin_x - cam_origin_x, ent.pos[1] + term_origin_y - cam_origin_y)
+                  + _term.color_rgb(*ent.display_color.value) + ent.display_char + _term.normal)
+
+    # Draw the player
+    player = level_data.player
+    print(_term.move_xy(player.pos[0] + term_origin_x - cam_origin_x, player.pos[1] + term_origin_y - cam_origin_y)
+          + _term.color_rgb(*player.display_color.value) + player.display_char + _term.normal)
 
 
 def set_message(_term, message: str):
@@ -289,9 +311,9 @@ def set_message(_term, message: str):
 
 def update_bottom_status(_term, level_data: LevelData):
     print(_term.normal + _term.move_xy(0, _term.height - 2) + "Status text like health etc" + _term.normal)
-    player = level_data.get_player()
+    player = level_data.player
     print(_term.magenta_on_black + _term.move_xy(0,
-                                                 _term.height - 1) + f"Player loc: {player.x:02d},{player.y:02d}" + _term.home + _term.normal)
+                                                 _term.height - 1) + f"Player loc: {player.pos[0]:02d},{player.pos[1]:02d}" + _term.home + _term.normal)
     # f"{number:02d}"
 
 
@@ -300,24 +322,24 @@ def handle_input(key, level_data: LevelData, term):
     if key.is_sequence:
         key = key.name
 
-    player = level_data.get_player()
+    player = level_data.player
 
     if key == 'KEY_UP' or key == '8':
-        player.move_to(player.x, player.y - 1, level_data)
+        player.move_to((player.pos[0] + 0, player.pos[1] - 1), level_data)
     elif key == 'KEY_DOWN' or key == '2':
-        player.move_to(player.x, player.y + 1, level_data)
+        player.move_to((player.pos[0] + 0, player.pos[1] + 1), level_data)
     elif key == 'KEY_LEFT' or key == '4':
-        player.move_to(player.x - 1, player.y, level_data)
+        player.move_to((player.pos[0] - 1, player.pos[1] + 0), level_data)
     elif key == 'KEY_RIGHT' or key == '6':
-        player.move_to(player.x + 1, player.y, level_data)
+        player.move_to((player.pos[0] + 1, player.pos[1] + 0), level_data)
     elif key == '1':
-        player.move_to(player.x - 1, player.y + 1, level_data)
+        player.move_to((player.pos[0] - 1, player.pos[1] + 1), level_data)
     elif key == '3':
-        player.move_to(player.x + 1, player.y + 1, level_data)
+        player.move_to((player.pos[0] + 1, player.pos[1] + 1), level_data)
     elif key == '7':
-        player.move_to(player.x - 1, player.y - 1, level_data)
+        player.move_to((player.pos[0] - 1, player.pos[1] - 1), level_data)
     elif key == '9':
-        player.move_to(player.x + 1, player.y - 1, level_data)
+        player.move_to((player.pos[0] + 1, player.pos[1] - 1), level_data)
     elif key == 'KEY_F1':
         logging.debug("F1 pressed!")
         set_message(_term=term,
@@ -329,6 +351,7 @@ def handle_input(key, level_data: LevelData, term):
         logging.debug(f"{neighbors = }")
     elif key == 'KEY_F3':
         logging.debug("F3 pressed!")
+        """
         player = level_data.get_player()
         for e in level_data.entities:
             if e.etype == EntityType.MONSTER:
@@ -347,6 +370,7 @@ def handle_input(key, level_data: LevelData, term):
                 logging.debug(f"Cost to reach player: {cost_so_far[(player.x, player.y)]}")
                 path = reconstruct_path(came_from, e.x, e.y, player.x, player.y)
                 logging.debug(f"Path from orc to player: {path}")
+        """
     elif key == 'KEY_F4':
         logging.debug("F4 pressed!")
 
@@ -427,17 +451,20 @@ def main():
         # logging.debug(f"Level generation completed after {toc-tic:0.4f} seconds")
 
         # Generate player entity
-        player = Entity(world_x=level_data.player_start_pos[0], world_y=level_data.player_start_pos[1],
-                        char="@", entity_type=EntityType.PLAYER,
-                        is_visible=True, visible_color=TermColor.WHITE)
-        level_data.entities.append(player)
+        player_armor = {DamageType.PHYSICAL: 0, DamageType.FIRE: 0, DamageType.LIGHTNING: 0, DamageType.COLD: 0, DamageType.CORROSIVE: 0}
+        player = Player(name="PlayerName", pos=level_data.player_start_pos,
+                        display_char="@", display_color=TermColor.WHITE,
+                        health_max=10.0, health=10, armor=player_armor, attack_power=5,
+                        xp=0, next_level_xp=10, inventory=[])
+
+        level_data.player = player
 
         # logging.debug(f"Color Enum red: {TermColor.RED} {TermColor.RED.value}")
 
         while True:
             # Recalc visibility
             # tic = time.perf_counter()
-            refresh_visibility(player.x, player.y, 200, level_data)
+            refresh_visibility(player.pos[0], player.pos[1], 200, level_data)
             # toc = time.perf_counter()
             # logging.debug(f"Visibility refresh completed after {toc - tic:0.4f} seconds")
             # refresh_octant(player.x, player.y, 200, 0, level_data)
@@ -451,7 +478,7 @@ def main():
                         term_origin_x=camera_window_origin_x, term_origin_y=camera_window_origin_y,
                         level_data=level_data)
 
-            level_data.effects = []
+            # level_data.vfx = []
 
             update_bottom_status(term, level_data)
 
@@ -469,8 +496,8 @@ def main():
                 # player.x += 1
                 # player.y += 1
 
-            for e in level_data.entities:
-                e.update(level_data)
+            # for e in level_data.entities:
+                # e.update(level_data)
 
     print("Exiting program...")
 

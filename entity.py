@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Protocol
 
 from globalEnums import TermColor, DamageType, ItemType
+from levelData import LevelData
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
 
@@ -32,7 +33,10 @@ class Player:
         pass
 
     def move_to(self, new_pos: (int, int), level_data: LevelData):
-        pass
+        # Should likely be a little more involved
+        if 0 <= new_pos[0] <= level_data.width and 0 <= new_pos[1] <= level_data.height:
+            if not level_data.tiles[new_pos[0]][new_pos[1]].is_blocking_move:
+                self.pos = new_pos
 
     def melee_attack(self, target: Targetable):
         pass
@@ -92,7 +96,7 @@ class Monster:
         pass
 
     def move_to(self, new_pos: (int, int)):
-        """Updates"""
+        """Updates position, but does not check validity of new_pos"""
         pass
 
     def look_at(self) -> str:
@@ -110,6 +114,56 @@ def melee_monster_update(self, level_data: LevelData):
     """ -subtract 12 AP"""
     """ Look to see if player is in melee range, if so attack, if not then see if player is in LOS"""
     """ If player is in LOS, pathfind towards player, if not then either stay still, or move to last pathfind target"""
+    pass
 
 
+def ranged_monster_update(self, level_data: LevelData):
+    pass
+
+
+@dataclass()
+class FloorEffect:
+    """This is for things like fire/poison clouds that have an effect each turn, but aren't targetable"""
+    name: str
+    pos: (int, int)  # TODO: migrate all of these into named tuples
+    display_char: str
+    display_color: TermColor  # have this effect the background color?
+    attack_power: int
+    effect_update: Callable
+    ticks_remaining: int
+    is_visible: bool = True
+    blocks_LOS: bool = False
+
+    def update(self, level_data: LevelData):
+        self.effect_update(self, level_data)
+        # if ticks_remaining == 0, then destroy self
+
+
+def fire_burn_update(self, level_data: LevelData):
+    """An example floor effect"""
+    """Check level_data for a player or monster in range
+        if they exist, then make them take_damage()"""
+    pass
+
+
+@dataclass()
+class Interactable:
+    """This is for things like fire/poison clouds that have an effect each turn, but aren't targetable"""
+    name: str
+    pos: (int, int)
+    display_char: str
+    display_color: TermColor
+    interaction_update: Callable
+    is_visible: bool = True
+    blocks_LOS: bool = False
+
+    def on_interact(self, level_data: LevelData):
+        """Do some specific thing, like drop loot, or open a door"""
+        self.interaction_update(self, level_data)
+
+
+def chest_on_open(self, level_data: LevelData):
+    """Example interaction_update function"""
+    """These are going to be odd/diverse, I think"""
+    """Spawns/drops a floor_item"""
     pass
