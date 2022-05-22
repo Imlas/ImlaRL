@@ -1,4 +1,6 @@
+from collections import namedtuple
 from enum import Enum
+from typing import Protocol
 
 
 class TermColor(Enum):
@@ -30,3 +32,12 @@ class ItemType(Enum):
 class ImlaConstants:
     BASE_SPEED = 12
 
+
+Point = namedtuple('Point', 'x y')
+
+
+class Entity(Protocol):
+    pos: Point
+    display_char: str
+    display_color: TermColor
+    is_visible: bool

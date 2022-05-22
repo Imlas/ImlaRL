@@ -6,7 +6,7 @@ import random
 import logging
 from typing import List
 
-from globalEnums import TermColor
+from globalEnums import TermColor, Entity
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
 
@@ -26,11 +26,11 @@ class Tile:
 
 
 class LevelData:
-    def __init__(self, tile_data, player_start_pos: (int, int), monsters: List, floor_items: List,
-                 floor_effects: List, interactables: List):
-        self.tiles = tile_data  # TODO: restructure this as a dict[(int, int), Tile] setup
-        self.width = len(self.tiles)
-        self.height = len(self.tiles[0])
+    def __init__(self, tile_data, height, width, player_start_pos: (int, int), monsters: List[Entity],
+                 floor_items: List[Entity], floor_effects: List[Entity], interactables: List[Entity]):
+        self.tiles = tile_data
+        self.width = width
+        self.height = height
         self.player_start_pos = player_start_pos
         self.monsters = monsters
         self.floor_items = floor_items
@@ -68,6 +68,13 @@ class LevelData:
             weight += 0.01
 
         return weight
+
+    def set_visibility_of_all(self, new_vis: bool):
+        """Sets both the is_visible and has_been_visible flags to new_vis for all tiles
+            Meant for debugging purposes"""
+        for point in self.tiles:
+            self.tiles[point].is_visible = new_vis
+            self.tiles[point].has_been_visible = new_vis
 
 
 def breadth_first_search(level_data: LevelData, start_x: int, start_y: int, goal_x: int, goal_y: int):

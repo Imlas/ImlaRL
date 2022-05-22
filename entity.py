@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Callable, Protocol
 
-from globalEnums import TermColor, DamageType, ItemType
+from globalEnums import TermColor, DamageType, ItemType, Point
 from levelData import LevelData
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
@@ -32,10 +32,10 @@ class Player:
     def take_damage(self, damage: float, damage_type: DamageType):
         pass
 
-    def move_to(self, new_pos: (int, int), level_data: LevelData):
+    def move_to(self, new_pos: Point, level_data: LevelData):
         # Should likely be a little more involved
-        if 0 <= new_pos[0] <= level_data.width and 0 <= new_pos[1] <= level_data.height:
-            if not level_data.tiles[new_pos[0]][new_pos[1]].is_blocking_move:
+        if 0 <= new_pos.x <= level_data.width and 0 <= new_pos.y <= level_data.height:
+            if not level_data.tiles[new_pos].is_blocking_move:
                 self.pos = new_pos
 
     def melee_attack(self, target: Targetable):
@@ -64,7 +64,7 @@ class FloorItem:
 @dataclass()
 class Monster:
     name: str
-    pos: (int, int)
+    pos: Point
     display_char: str
     display_color: TermColor
     health_max: float
@@ -125,7 +125,7 @@ def ranged_monster_update(self, level_data: LevelData):
 class FloorEffect:
     """This is for things like fire/poison clouds that have an effect each turn, but aren't targetable"""
     name: str
-    pos: (int, int)  # TODO: migrate all of these into named tuples
+    pos: Point
     display_char: str
     display_color: TermColor  # have this effect the background color?
     attack_power: int
@@ -150,7 +150,7 @@ def fire_burn_update(self, level_data: LevelData):
 class Interactable:
     """This is for things like fire/poison clouds that have an effect each turn, but aren't targetable"""
     name: str
-    pos: (int, int)
+    pos: Point
     display_char: str
     display_color: TermColor
     interaction_update: Callable

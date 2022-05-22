@@ -20,15 +20,12 @@ print(f"{foo:.2f}")
 from typing import TypeVar, Protocol, List, Dict, Tuple, Iterator
 
 import blessed
-# import random
 import logging
-# from enum import Enum, auto
 from dataclasses import dataclass, field
 from skimage.draw import line
-from collections import deque
 
 from entity import Player
-from globalEnums import DamageType
+from globalEnums import DamageType, Point, Entity
 from levelData import TermColor, LevelData, breadth_first_search, dijkstra_search, \
     reconstruct_path, a_star_search
 from levelGeneration import generate_level
@@ -144,6 +141,8 @@ def transform_octant(row: int, col: int, octant_num: int) -> (int, int):
 
 
 def refresh_visibility(origin_x: int, origin_y: int, max_range: int, level_data: LevelData):
+    # TODO: correctly implement sight range
+    #  and later on, light sources
     for octant in range(8):
         refresh_octant(origin_x, origin_y, max_range, octant, level_data)
 
@@ -161,10 +160,10 @@ def refresh_octant(origin_x: int, origin_y: int, max_range: int, octant: int, le
         if (octant == 0 or octant == 7) and test_y + origin_y < 0:
             # logging.debug(f"Breaking octant {octant} due to hitting map boundary")
             break
-        if (octant == 3 or octant == 4) and test_y + origin_y >= len(level_data.tiles[0]):
+        if (octant == 3 or octant == 4) and test_y + origin_y >= level_data.height:
             # logging.debug(f"Breaking octant {octant} due to hitting map boundary")
             break
-        if (octant == 1 or octant == 2) and test_x + origin_x >= len(level_data.tiles):
+        if (octant == 1 or octant == 2) and test_x + origin_x >= level_data.width:
             # logging.debug(f"Breaking octant {octant} due to hitting map boundary")
             break
         if (octant == 5 or octant == 6) and test_x + origin_x < 0:
@@ -178,32 +177,33 @@ def refresh_octant(origin_x: int, origin_y: int, max_range: int, octant: int, le
             x, y = transform_octant(row, col, octant)
             x += origin_x
             y += origin_y
+            pos = Point(x, y)
             # logging.debug(f"-----Tile {x},{y}-----")
 
             # For now we'll just check each tile
-            if x < 0 or y < 0 or x >= len(level_data.tiles) or y >= len(level_data.tiles[0]) or level_data.tiles[x][
-                y] is None:
+            if x < 0 or y < 0 or x >= level_data.width or y >= level_data.height or pos not in level_data.tiles:
                 # if level_data[x][y] is None:
                 # logging.debug("Tile not valid. breaking to next tile")
                 continue
 
             if full_shadow:
                 # logging.debug(f"Shadow line is full. Setting is_visible False")
-                level_data.tiles[x][y].is_visible = False
+                level_data.tiles[pos].is_visible = False
             else:
                 # logging.debug(f"Shadow line is not full. Calcing projection")
 
                 projection = ShadowLine.project_tile(row, col)
                 # logging.debug(f"{projection = }")
                 # See if this tile is visible/currently in the shadow line
+                # TODO: add in checking entities on this Tile to see if they block LOS
                 visible = not s_line.is_in_shadow(projection)
-                level_data.tiles[x][y].is_visible = visible
+                level_data.tiles[pos].is_visible = visible
                 if visible is True:
-                    level_data.tiles[x][y].has_been_visible = True
+                    level_data.tiles[pos].has_been_visible = True
                 # logging.debug(f"Tile is vis: {visible} Blocks?: {level_data[x][y].is_blocking_LOS}")
 
                 # Add the projection to the shadow line if this tile blocks LOS
-                if visible and level_data.tiles[x][y].is_blocking_LOS:
+                if visible and level_data.tiles[pos].is_blocking_LOS:
                     # logging.debug(f"Adding projection to shadow line")
                     s_line.add(projection)
                     full_shadow = s_line.is_full_shadow()
@@ -218,12 +218,13 @@ def draw_border(_term, origin_x, origin_y, box_width, box_height, border_char):
     print(border_char * box_width + _term.home)  # Adding the term.home avoids corner/scrolling issues
 
 
-def entities_in_frame(all_entities: list, cam_origin_x: int, cam_origin_y: int, cam_width: int,
-                      cam_height: int) -> list:
-    """Returns a list of all entities that exist within the given frame of the camera"""
-    # Returns a list of all of the entities that are within the frame of the camera
-    # It does not check if the entities are is_visible
+def entities_in_frame(all_entities: list[Entity], cam_origin_x: int, cam_origin_y: int, cam_width: int,
+                      cam_height: int, visibility: bool) -> list[Entity]:
+    """Returns a list of all of the entities that are within the frame of the camera with matching visibility"""
     entities = []
+
+    if len(all_entities) == 0:
+        return entities
 
     # logging.debug(f"{all_entities = }")
 
@@ -231,75 +232,82 @@ def entities_in_frame(all_entities: list, cam_origin_x: int, cam_origin_y: int, 
     min_y, max_y = cam_origin_y, cam_origin_y + cam_height
 
     for e in all_entities:
-        if min_x <= e.pos[0] <= max_x and min_y <= e.pos[1] <= max_y:
+        if min_x <= e.pos.x <= max_x and min_y <= e.pos.y <= max_y and e.is_visible == visibility:
             entities.append(e)
 
     return entities
 
 
-def draw_camera(_term, cam_origin_x: int, cam_origin_y: int, cam_width: int, cam_height: int,
+def draw_camera(term, cam_origin_x: int, cam_origin_y: int, cam_width: int, cam_height: int,
                 term_origin_x: int, term_origin_y: int, level_data: LevelData):
     """Draws everything in the camera view"""
     # cam_origin x/y are in world-space
     # term_origin are the top-left corner in the console
-    # Draw the tiles
-
+    # Draw the tiles first
     for rows in range(cam_origin_y, cam_origin_y + cam_height):
         rowstr = ""
         for cols in range(cam_origin_x, cam_origin_x + cam_width):
-            tile_char = " "
+            pos = Point(cols, rows)
             try:
-                if cols >= 0 and rows >= 0:
-                    if level_data.tiles[cols][rows] is not None:
-                        if level_data.tiles[cols][rows].is_visible:
-                            tile_char = _term.color_rgb(*level_data.tiles[cols][rows].visible_color.value) + \
-                                        level_data.tiles[cols][rows].floor_char
-                        elif level_data.tiles[cols][rows].has_been_visible:
-                            tile_char = _term.color_rgb(*level_data.tiles[cols][rows].fow_color.value) + \
-                                        level_data.tiles[cols][rows].floor_char
-            except IndexError:
-                pass
+                tile = level_data.tiles[pos]
+                if tile.is_visible:
+                    tile_char = term.color_rgb(*tile.visible_color.value) + \
+                                tile.floor_char
+                elif tile.has_been_visible:
+                    tile_char = term.color_rgb(*tile.fow_color.value) + \
+                                tile.floor_char
+                else:
+                    tile_char = " "
+            except KeyError:
+                tile_char = " "
+
             rowstr += tile_char
-        print(_term.move_xy(term_origin_x, rows + term_origin_y - cam_origin_y) + rowstr + _term.normal)
+        print(term.move_xy(term_origin_x, rows + term_origin_y - cam_origin_y) + rowstr + term.normal)
+    # Todo: I suspect it'll be faster/more performant to work the entity/vfx displays into the above loop
+    #   instead of multiple loops/draw cycles
+    #   term.move_xy(...) seems to be relatively expensive
+    #   Also need to handle multiple Entities in one tile
 
     # Draw the floor items
-    # We'll later need to add some logic to handle two entities on the same Tile
-    # todo break this code chunk into a separate function
-    #  code repetition is bad, m'kay?
-    frame_items = entities_in_frame(level_data.floor_items, cam_origin_x, cam_origin_y, cam_width, cam_height)
-    for ent in frame_items:
-        if level_data.tiles[ent.pos[0]][ent.pos[1]].is_visible:
-            print(_term.move_xy(ent.pos[0] + term_origin_x - cam_origin_x, ent.pos[1] + term_origin_y - cam_origin_y)
-                  + _term.color_rgb(*ent.display_color.value) + ent.display_char + _term.normal)
+    frame_items = entities_in_frame(all_entities=level_data.floor_items, cam_origin_x=cam_origin_x,
+                                    cam_origin_y=cam_origin_y, cam_width=cam_width, cam_height=cam_height,
+                                    visibility=True)
+    frame_items = filter(lambda entity: level_data.tiles[entity.pos].is_visible, frame_items)
+    draw_list_of_entities(frame_items, term, cam_origin_x, cam_origin_y, term_origin_x, term_origin_y)
+
+    # Draw the interactables
+    frame_interactables = entities_in_frame(all_entities=level_data.interactables, cam_origin_x=cam_origin_x,
+                                            cam_origin_y=cam_origin_y, cam_width=cam_width, cam_height=cam_height,
+                                            visibility=True)
+    frame_interactables = filter(lambda entity: level_data.tiles[entity.pos].is_visible, frame_interactables)
+    draw_list_of_entities(frame_interactables, term, cam_origin_x, cam_origin_y, term_origin_x, term_origin_y)
 
     # Draw the monsters
-    # We'll later need to add some logic to handle two entities on the same Tile
-    frame_interactables = entities_in_frame(level_data.interactables, cam_origin_x, cam_origin_y, cam_width, cam_height)
-    for ent in frame_interactables:
-        if level_data.tiles[ent.pos[0]][ent.pos[1]].is_visible:
-            print(_term.move_xy(ent.pos[0] + term_origin_x - cam_origin_x, ent.pos[1] + term_origin_y - cam_origin_y)
-                  + _term.color_rgb(*ent.display_color.value) + ent.display_char + _term.normal)
-
-    # Draw the monsters
-    # We'll later need to add some logic to handle two entities on the same Tile
-    frame_monsters = entities_in_frame(level_data.monsters, cam_origin_x, cam_origin_y, cam_width, cam_height)
-    for ent in frame_monsters:
-        if level_data.tiles[ent.pos[0]][ent.pos[1]].is_visible:
-            print(_term.move_xy(ent.pos[0] + term_origin_x - cam_origin_x, ent.pos[1] + term_origin_y - cam_origin_y)
-                  + _term.color_rgb(*ent.display_color.value) + ent.display_char + _term.normal)
+    frame_monsters = entities_in_frame(all_entities=level_data.monsters, cam_origin_x=cam_origin_x,
+                                       cam_origin_y=cam_origin_y, cam_width=cam_width, cam_height=cam_height,
+                                       visibility=True)
+    frame_monsters = filter(lambda entity: level_data.tiles[entity.pos].is_visible, frame_monsters)
+    draw_list_of_entities(frame_monsters, term, cam_origin_x, cam_origin_y, term_origin_x, term_origin_y)
 
     # Draw the floor effects
-    # We'll later need to add some logic to handle two entities on the same Tile
-    frame_effects = entities_in_frame(level_data.floor_effects, cam_origin_x, cam_origin_y, cam_width, cam_height)
-    for ent in frame_effects:
-        if level_data.tiles[ent.pos[0]][ent.pos[1]].is_visible:
-            print(_term.move_xy(ent.pos[0] + term_origin_x - cam_origin_x, ent.pos[1] + term_origin_y - cam_origin_y)
-                  + _term.color_rgb(*ent.display_color.value) + ent.display_char + _term.normal)
+    frame_floor_effects = entities_in_frame(all_entities=level_data.floor_effects, cam_origin_x=cam_origin_x,
+                                            cam_origin_y=cam_origin_y, cam_width=cam_width, cam_height=cam_height,
+                                            visibility=True)
+    frame_floor_effects = filter(lambda entity: level_data.tiles[entity.pos].is_visible, frame_floor_effects)
+    draw_list_of_entities(frame_floor_effects, term, cam_origin_x, cam_origin_y, term_origin_x, term_origin_y)
 
-    # Draw the player
+    # Draw the vfx
+
+    # Last - draw the player on top of everything else
     player = level_data.player
-    print(_term.move_xy(player.pos[0] + term_origin_x - cam_origin_x, player.pos[1] + term_origin_y - cam_origin_y)
-          + _term.color_rgb(*player.display_color.value) + player.display_char + _term.normal)
+    print(term.move_xy(player.pos.x + term_origin_x - cam_origin_x, player.pos.y + term_origin_y - cam_origin_y)
+          + term.color_rgb(*player.display_color.value) + player.display_char + term.normal)
+
+
+def draw_list_of_entities(entities, term, cam_origin_x, cam_origin_y, term_origin_x, term_origin_y):
+    for ent in entities:
+        print(term.move_xy(ent.pos.x + term_origin_x - cam_origin_x, ent.pos.y + term_origin_y - cam_origin_y)
+              + term.color_rgb(*ent.display_color.value) + ent.display_char + term.normal)
 
 
 def set_message(_term, message: str):
@@ -325,28 +333,28 @@ def handle_input(key, level_data: LevelData, term):
     player = level_data.player
 
     if key == 'KEY_UP' or key == '8':
-        player.move_to((player.pos[0] + 0, player.pos[1] - 1), level_data)
+        player.move_to(Point(player.pos.x + 0, player.pos.y - 1), level_data)
     elif key == 'KEY_DOWN' or key == '2':
-        player.move_to((player.pos[0] + 0, player.pos[1] + 1), level_data)
+        player.move_to(Point(player.pos.x + 0, player.pos.y + 1), level_data)
     elif key == 'KEY_LEFT' or key == '4':
-        player.move_to((player.pos[0] - 1, player.pos[1] + 0), level_data)
+        player.move_to(Point(player.pos.x - 1, player.pos.y + 0), level_data)
     elif key == 'KEY_RIGHT' or key == '6':
-        player.move_to((player.pos[0] + 1, player.pos[1] + 0), level_data)
+        player.move_to(Point(player.pos.x + 1, player.pos.y + 0), level_data)
     elif key == '1':
-        player.move_to((player.pos[0] - 1, player.pos[1] + 1), level_data)
+        player.move_to(Point(player.pos.x - 1, player.pos.y + 1), level_data)
     elif key == '3':
-        player.move_to((player.pos[0] + 1, player.pos[1] + 1), level_data)
+        player.move_to(Point(player.pos.x + 1, player.pos.y + 1), level_data)
     elif key == '7':
-        player.move_to((player.pos[0] - 1, player.pos[1] - 1), level_data)
+        player.move_to(Point(player.pos.x - 1, player.pos.y - 1), level_data)
     elif key == '9':
-        player.move_to((player.pos[0] + 1, player.pos[1] - 1), level_data)
+        player.move_to(Point(player.pos.x + 1, player.pos.y - 1), level_data)
     elif key == 'KEY_F1':
         logging.debug("F1 pressed!")
         set_message(_term=term,
                     message=f"{term.white_on_black}White on black {term.bright_black_on_black} Bright black on black{term.normal}")
     elif key == 'KEY_F2':
         logging.debug("F2 pressed!")
-        player = level_data.get_player()
+        player = level_data.player
         neighbors = level_data.get_neighbors(player.x, player.y)
         logging.debug(f"{neighbors = }")
     elif key == 'KEY_F3':
@@ -451,7 +459,8 @@ def main():
         # logging.debug(f"Level generation completed after {toc-tic:0.4f} seconds")
 
         # Generate player entity
-        player_armor = {DamageType.PHYSICAL: 0, DamageType.FIRE: 0, DamageType.LIGHTNING: 0, DamageType.COLD: 0, DamageType.CORROSIVE: 0}
+        player_armor = {DamageType.PHYSICAL: 0, DamageType.FIRE: 0, DamageType.LIGHTNING: 0, DamageType.COLD: 0,
+                        DamageType.CORROSIVE: 0}
         player = Player(name="PlayerName", pos=level_data.player_start_pos,
                         display_char="@", display_color=TermColor.WHITE,
                         health_max=10.0, health=10, armor=player_armor, attack_power=5,
@@ -459,12 +468,14 @@ def main():
 
         level_data.player = player
 
+        # level_data.set_visibility_of_all(True)
+
         # logging.debug(f"Color Enum red: {TermColor.RED} {TermColor.RED.value}")
 
         while True:
             # Recalc visibility
             # tic = time.perf_counter()
-            refresh_visibility(player.pos[0], player.pos[1], 200, level_data)
+            refresh_visibility(player.pos.x, player.pos.y, 200, level_data)
             # toc = time.perf_counter()
             # logging.debug(f"Visibility refresh completed after {toc - tic:0.4f} seconds")
             # refresh_octant(player.x, player.y, 200, 0, level_data)
@@ -473,7 +484,7 @@ def main():
 
             # Draw camera contents
             # draw_camera(term, 0, 0, 25, 10, 1, 2)
-            draw_camera(_term=term, cam_origin_x=camera_x, cam_origin_y=camera_y, cam_width=camera_width,
+            draw_camera(term=term, cam_origin_x=camera_x, cam_origin_y=camera_y, cam_width=camera_width,
                         cam_height=camera_height,
                         term_origin_x=camera_window_origin_x, term_origin_y=camera_window_origin_y,
                         level_data=level_data)
@@ -497,7 +508,7 @@ def main():
                 # player.y += 1
 
             # for e in level_data.entities:
-                # e.update(level_data)
+            # e.update(level_data)
 
     print("Exiting program...")
 
