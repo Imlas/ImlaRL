@@ -26,7 +26,7 @@ from skimage.draw import line
 
 from entity import Player
 from globalEnums import DamageType, Point, Entity
-from levelData import TermColor, LevelData, breadth_first_search, dijkstra_search, \
+from levelData import TermColor, LevelData, dijkstra_search, \
     reconstruct_path, a_star_search
 from levelGeneration import generate_level
 
@@ -241,6 +241,7 @@ def entities_in_frame(all_entities: list[Entity], cam_origin_x: int, cam_origin_
 def draw_camera(term, cam_origin_x: int, cam_origin_y: int, cam_width: int, cam_height: int,
                 term_origin_x: int, term_origin_y: int, level_data: LevelData):
     """Draws everything in the camera view"""
+    # Todo: Look into increasing performance in ths method (or seeing if this is actually the issue)
     # cam_origin x/y are in world-space
     # term_origin are the top-left corner in the console
     # Draw the tiles first
@@ -507,8 +508,8 @@ def main():
                 # player.x += 1
                 # player.y += 1
 
-            # for e in level_data.entities:
-            # e.update(level_data)
+            for m in level_data.monsters:
+                m.update(level_data)
 
     print("Exiting program...")
 

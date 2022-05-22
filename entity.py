@@ -2,8 +2,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Callable, Protocol
 
-from globalEnums import TermColor, DamageType, ItemType, Point
-from levelData import LevelData
+from globalEnums import TermColor, DamageType, ItemType, Point, ImlaConstants
+from levelData import LevelData, are_points_in_LOS, a_star_search, reconstruct_path
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
 
@@ -95,29 +95,55 @@ class Monster:
         """Will pathfind towards goal_pos and (if a path is valid) take the first move"""
         pass
 
-    def move_to(self, new_pos: (int, int)):
+    def move_to(self, new_pos: Point):
         """Updates position, but does not check validity of new_pos"""
-        pass
+        logging.debug(f"{self.name} is moving to {new_pos = } from {self.pos}")
+        self.pos = new_pos
 
     def look_at(self) -> str:
         """This may end up just being a separate 'long_name' field for monsters"""
-        pass
+        logging.debug(f"Something is standing here named {self.name}")
+        return f"Something is standing here named {self.name}"
 
     def attack(self, target: Targetable):
-        pass
+        logging.debug(f"{self.name} attacks {target}!")
 
 
-def melee_monster_update(self, level_data: LevelData):
+def melee_monster_update(self: Monster, level_data: LevelData):
     """Tick up action points"""
+    self.action_points += self.speed
 
-    """while action points are > NORMAL_SPEED (12), do stuff"""
-    """ -subtract 12 AP"""
-    """ Look to see if player is in melee range, if so attack, if not then see if player is in LOS"""
-    """ If player is in LOS, pathfind towards player, if not then either stay still, or move to last pathfind target"""
+    # while action points are > NORMAL_SPEED (12), do stuff
+    while self.action_points >= ImlaConstants.BASE_SPEED:
+        # -subtract 12 AP
+        self.action_points -= ImlaConstants.BASE_SPEED
+
+        # Look to see if player is in melee range, if so attack, if not then see if player is in LOS
+        player = level_data.player
+        if abs(self.pos.x - player.pos.x) <= 1 and abs(self.pos.y - player.pos.y) <= 1:
+            # If player is in melee range
+            logging.debug(f"Monster is adjacent to player, attacking!")
+            # Actually attack here
+        else:
+            # Player is not in melee range, so check if they are in LOS
+            if are_points_in_LOS(self.pos, player.pos, level_data):
+                # Player is in LOS, so store path and path towards them
+                # logging.debug(f"Monster at {self.pos} can see player at {player.pos}")
+                came_from, cost_so_far = a_star_search(level_data=level_data, start_pos=self.pos, goal_pos=player.pos)
+                self.stored_path = reconstruct_path(came_from=came_from, start_point=self.pos, goal_point=player.pos)
+                self.move_to(self.stored_path.pop(0))
+            else:
+                # Player is not in LOS, check if monster has a path already (ie. previously saw player)
+                # logging.debug(f"Monster at {self.pos} cannot see player at {player.pos}, {hasattr(self, 'stored_path')}")
+                if hasattr(self, 'stored_path') and len(self.stored_path) > 0:
+                    self.move_to(self.stored_path.pop(0))
+
+
+def ranged_monster_update(self: Monster, level_data: LevelData):
     pass
 
 
-def ranged_monster_update(self, level_data: LevelData):
+def hunter_monster_update(self: Monster, level_data: LevelData):
     pass
 
 
@@ -139,7 +165,7 @@ class FloorEffect:
         # if ticks_remaining == 0, then destroy self
 
 
-def fire_burn_update(self, level_data: LevelData):
+def fire_burn_update(self: FloorEffect, level_data: LevelData):
     """An example floor effect"""
     """Check level_data for a player or monster in range
         if they exist, then make them take_damage()"""
@@ -162,7 +188,7 @@ class Interactable:
         self.interaction_update(self, level_data)
 
 
-def chest_on_open(self, level_data: LevelData):
+def chest_on_open(self: Interactable, level_data: LevelData):
     """Example interaction_update function"""
     """These are going to be odd/diverse, I think"""
     """Spawns/drops a floor_item"""

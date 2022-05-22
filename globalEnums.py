@@ -41,3 +41,8 @@ class Entity(Protocol):
     display_char: str
     display_color: TermColor
     is_visible: bool
+
+
+class Updatable(Protocol):
+    def update(self, level_data):  # Unfortunately can't typehint level_data without circ references
+        ...

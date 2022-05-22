@@ -154,6 +154,8 @@ def generate_level(**kwargs) -> LevelData:
         monster_room = random.randint(0, len(rooms) - 1)
         monster_start_point = rooms[monster_room].get_random_point()
 
+        # Todo: figure out how to structure these into some separate file
+        #  or, for bonus points, load stat-lines in from XML
         monster_armor = {DamageType.PHYSICAL: 0, DamageType.FIRE: 0, DamageType.LIGHTNING: 0, DamageType.COLD: 0,
                          DamageType.CORROSIVE: 0}
         monster_drop = FloorItem(name="gold", pos=(None, None), display_char="$", display_color=TermColor.GOLD,
