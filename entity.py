@@ -1,15 +1,16 @@
 import logging
+import random
 from dataclasses import dataclass, field
 from typing import Callable, Protocol
 
 from globalEnums import TermColor, DamageType, ItemType, Point, ImlaConstants
-from levelData import LevelData, are_points_in_LOS, a_star_search, reconstruct_path
+from levelData import LevelData, are_points_in_LOS, a_star_search, reconstruct_path, are_points_within_distance
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
 
 
 class Targetable(Protocol):
-    def take_damage(self, damage: float, damage_type: DamageType):
+    def take_damage(self, damage: float, damage_type: DamageType) -> float:
         ...
 
 
@@ -28,9 +29,16 @@ class Player:
     inventory: list = field(default_factory=list)  # This will almost certainly get tweaked later
     speed: int = 12
     action_points: int = 0
+    sight_range: int = 12
 
-    def take_damage(self, damage: float, damage_type: DamageType):
-        pass
+    def take_damage(self, damage: float, damage_type: DamageType) -> float:
+        logging.debug(f"Taking damage, {damage = } {damage_type = } against {self.armor[damage_type]} armor")
+        net_damage = damage_after_mitigation(damage, self.armor[damage_type])
+        self.health -= net_damage
+        if self.health <= 0:
+            logging.debug(f"Player health is below zero. Player is dead!")
+
+        return net_damage
 
     def move_to(self, new_pos: Point, level_data: LevelData):
         # Should likely be a little more involved
@@ -71,6 +79,7 @@ class Monster:
     health: float
     armor: dict[DamageType, int]
     attack_power: int
+    sight_range: int
     monster_update: Callable
     on_death_drop: (ItemType, int)
     is_visible: bool = True
@@ -82,14 +91,16 @@ class Monster:
         self.monster_update(self, level_data)
 
     def take_damage(self, damage: float, damage_type: DamageType) -> float:
-        # Damage multiplier = 1 - (0.06 * total armor) / (1 + 0.06 * abs(total armor))
-        # Pull in appropriate armor value
-        # Calc damage multiplier
-        # Reduce HP
-        # Check if it should die
-        # If yes, drop items, award xp
-        # Return how much damage was taken
-        pass
+        logging.debug(f"Taking damage, {damage = } {damage_type = } against {self.armor[damage_type]} armor")
+        net_damage = damage_after_mitigation(damage, self.armor[damage_type])
+        self.health -= net_damage
+        if self.health <= 0:
+            logging.debug(f"Monster health is below zero. Player is dead!")
+            # Drop items
+            # Reward XP?
+            # Die
+
+        return net_damage
 
     def move_towards(self, goal_pos: (int, int), level_data: LevelData):
         """Will pathfind towards goal_pos and (if a path is valid) take the first move"""
@@ -105,8 +116,10 @@ class Monster:
         logging.debug(f"Something is standing here named {self.name}")
         return f"Something is standing here named {self.name}"
 
-    def attack(self, target: Targetable):
+    def attack(self, target: Targetable, damage_amount: float, damage_type: DamageType) -> float:
+        """ """
         logging.debug(f"{self.name} attacks {target}!")
+        return target.take_damage(damage_amount, damage_type)
 
 
 def melee_monster_update(self: Monster, level_data: LevelData):
@@ -123,18 +136,21 @@ def melee_monster_update(self: Monster, level_data: LevelData):
         if abs(self.pos.x - player.pos.x) <= 1 and abs(self.pos.y - player.pos.y) <= 1:
             # If player is in melee range
             logging.debug(f"Monster is adjacent to player, attacking!")
-            # Actually attack here
+            raw_damage = random.randint(self.attack_power - 1, self.attack_power + 1)
+            damage_done = self.attack(player, raw_damage, DamageType.PHYSICAL)
+            # Display a some status message and/or update ui bits
+            logging.debug(f"{self.name} attacked the player for {damage_done} damage!")
         else:
             # Player is not in melee range, so check if they are in LOS
-            if are_points_in_LOS(self.pos, player.pos, level_data):
+            if level_data.tiles[self.pos].is_in_LOS and are_points_within_distance(player.pos, self.pos, self.sight_range):
                 # Player is in LOS, so store path and path towards them
-                # logging.debug(f"Monster at {self.pos} can see player at {player.pos}")
+                logging.debug(f"Monster at {self.pos} can see player at {player.pos}")
                 came_from, cost_so_far = a_star_search(level_data=level_data, start_pos=self.pos, goal_pos=player.pos)
                 self.stored_path = reconstruct_path(came_from=came_from, start_point=self.pos, goal_point=player.pos)
                 self.move_to(self.stored_path.pop(0))
             else:
                 # Player is not in LOS, check if monster has a path already (ie. previously saw player)
-                # logging.debug(f"Monster at {self.pos} cannot see player at {player.pos}, {hasattr(self, 'stored_path')}")
+                logging.debug(f"Monster at {self.pos} cannot see player at {player.pos}, {hasattr(self, 'stored_path')}")
                 if hasattr(self, 'stored_path') and len(self.stored_path) > 0:
                     self.move_to(self.stored_path.pop(0))
 
@@ -193,3 +209,9 @@ def chest_on_open(self: Interactable, level_data: LevelData):
     """These are going to be odd/diverse, I think"""
     """Spawns/drops a floor_item"""
     pass
+
+
+def damage_after_mitigation(raw_amount: float, armor: int) -> float:
+    # Damage multiplier = 1 - (0.06 * total armor) / (1 + 0.06 * abs(total armor))
+    multiplier = 1 - (0.06 * armor) / (1 + 0.06 * abs(armor))
+    return raw_amount * multiplier

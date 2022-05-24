@@ -140,21 +140,22 @@ def transform_octant(row: int, col: int, octant_num: int) -> (int, int):
         return None
 
 
-def refresh_visibility(origin_x: int, origin_y: int, max_range: int, level_data: LevelData):
+def refresh_visibility(origin_x: int, origin_y: int, sight_range: int, level_data: LevelData):
+    """Toggles the values of is_in_LOS for the tiles of level_data"""
     # TODO: correctly implement sight range
     #  and later on, light sources
     for octant in range(8):
-        refresh_octant(origin_x, origin_y, max_range, octant, level_data)
+        refresh_octant(origin_x, origin_y, sight_range, octant, level_data)
 
 
-def refresh_octant(origin_x: int, origin_y: int, max_range: int, octant: int, level_data: LevelData):
+def refresh_octant(origin_x: int, origin_y: int, sight_range: int, octant: int, level_data: LevelData):
     s_line = ShadowLine()
     full_shadow = False
 
     # logging.debug(f"Beginning an octant refresh starting at {origin_x},{origin_y}")
 
     # Be mindful that the row,col numbers here are in octant coordinates
-    for row in range(1, max_range + 1):
+    for row in range(1, max(level_data.width, level_data.height)-1):
         # logging.debug(f"{row = }")
         test_x, test_y = transform_octant(row, 0, octant)
         if (octant == 0 or octant == 7) and test_y + origin_y < 0:
@@ -197,10 +198,15 @@ def refresh_octant(origin_x: int, origin_y: int, max_range: int, octant: int, le
                 # See if this tile is visible/currently in the shadow line
                 # TODO: add in checking entities on this Tile to see if they block LOS
                 visible = not s_line.is_in_shadow(projection)
-                level_data.tiles[pos].is_visible = visible
-                if visible is True:
-                    level_data.tiles[pos].has_been_visible = True
-                # logging.debug(f"Tile is vis: {visible} Blocks?: {level_data[x][y].is_blocking_LOS}")
+                level_data.tiles[pos].is_in_LOS = visible
+
+                level_data.tiles[pos].is_visible = False
+                if row <= sight_range:
+                    # Later add a "is_lit" check here
+                    level_data.tiles[pos].is_visible = visible
+                    if visible is True:
+                        level_data.tiles[pos].has_been_visible = True
+                        # logging.debug(f"Tile is vis: {visible} Blocks?: {level_data[x][y].is_blocking_LOS}")
 
                 # Add the projection to the shadow line if this tile blocks LOS
                 if visible and level_data.tiles[pos].is_blocking_LOS:
@@ -319,10 +325,10 @@ def set_message(_term, message: str):
 
 
 def update_bottom_status(_term, level_data: LevelData):
-    print(_term.normal + _term.move_xy(0, _term.height - 2) + "Status text like health etc" + _term.normal)
     player = level_data.player
+    print(_term.normal + _term.move_xy(0, _term.height - 2) + f"Health: {player.health:02d}/{player.health_max:02d}" + _term.normal)
     print(_term.magenta_on_black + _term.move_xy(0,
-                                                 _term.height - 1) + f"Player loc: {player.pos[0]:02d},{player.pos[1]:02d}" + _term.home + _term.normal)
+                                                 _term.height - 1) + f"Player loc: {player.pos.x:02d},{player.pos.y:02d}" + _term.home + _term.normal)
     # f"{number:02d}"
 
 
@@ -349,6 +355,8 @@ def handle_input(key, level_data: LevelData, term):
         player.move_to(Point(player.pos.x - 1, player.pos.y - 1), level_data)
     elif key == '9':
         player.move_to(Point(player.pos.x + 1, player.pos.y - 1), level_data)
+    elif key == '5':
+        pass
     elif key == 'KEY_F1':
         logging.debug("F1 pressed!")
         set_message(_term=term,
@@ -356,7 +364,7 @@ def handle_input(key, level_data: LevelData, term):
     elif key == 'KEY_F2':
         logging.debug("F2 pressed!")
         player = level_data.player
-        neighbors = level_data.get_neighbors(player.x, player.y)
+        neighbors = level_data.get_neighbors(player.pos)
         logging.debug(f"{neighbors = }")
     elif key == 'KEY_F3':
         logging.debug("F3 pressed!")
@@ -476,7 +484,7 @@ def main():
         while True:
             # Recalc visibility
             # tic = time.perf_counter()
-            refresh_visibility(player.pos.x, player.pos.y, 200, level_data)
+            refresh_visibility(player.pos.x, player.pos.y, player.sight_range, level_data)
             # toc = time.perf_counter()
             # logging.debug(f"Visibility refresh completed after {toc - tic:0.4f} seconds")
             # refresh_octant(player.x, player.y, 200, 0, level_data)

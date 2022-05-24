@@ -53,7 +53,7 @@ def generate_blank_tile_data(width: int, height: int, template_tile: Tile) -> di
                      is_blocking_move=template_tile.is_blocking_move, is_blocking_LOS=template_tile.is_blocking_LOS,
                      is_visible=template_tile.is_visible, visible_color=template_tile.visible_color,
                      fow_color=template_tile.fow_color, has_been_visible=template_tile.has_been_visible,
-                     movement_weight=template_tile.movement_weight)
+                     movement_weight=template_tile.movement_weight, is_in_LOS=template_tile.is_in_LOS)
             tile_data[p] = t
 
     return tile_data
@@ -118,14 +118,14 @@ def generate_level(**kwargs) -> LevelData:
         # Todo: maybe store these tile templates somewhere?
         template_wall_tile = Tile(world_x=0, world_y=0, floor_char="#", is_blocking_move=True, is_blocking_LOS=True,
                                   is_visible=False, visible_color=TermColor.LIGHT_GREY, fow_color=TermColor.MID_GREY,
-                                  has_been_visible=False, movement_weight=1)
+                                  has_been_visible=False, movement_weight=1, is_in_LOS=False)
 
         tile_data = generate_blank_tile_data(width=map_width, height=map_height, template_tile=template_wall_tile)
 
         # Next we'll carve out the rooms
         template_floor_tile = Tile(world_x=0, world_y=0, floor_char=".", is_blocking_move=False, is_blocking_LOS=False,
                                    is_visible=False, visible_color=TermColor.MID_GREY, fow_color=TermColor.DARK_GREY,
-                                   has_been_visible=False, movement_weight=1)
+                                   has_been_visible=False, movement_weight=1, is_in_LOS=False)
 
         for room in rooms:
             fill_room_with_template(room, template_floor_tile, tile_data)
@@ -162,7 +162,7 @@ def generate_level(**kwargs) -> LevelData:
                                  is_visible=True, blocks_LOS=False, item_type=ItemType.GOLD, item_amount=10)
         monster = Monster(name="Orc", pos=monster_start_point,
                           display_char="o", display_color=TermColor.GREEN,
-                          health_max=5.0, health=5.0, armor=monster_armor, attack_power=2,
+                          health_max=5.0, health=5.0, armor=monster_armor, attack_power=2, sight_range=8,
                           monster_update=melee_monster_update, on_death_drop=monster_drop)
         monsters.append(monster)
 
@@ -190,7 +190,8 @@ def fill_hallway(starting_point, ending_point, template_floor_tile, tile_data):
                         visible_color=template_floor_tile.visible_color,
                         fow_color=template_floor_tile.fow_color,
                         has_been_visible=template_floor_tile.has_been_visible,
-                        movement_weight=template_floor_tile.movement_weight)
+                        movement_weight=template_floor_tile.movement_weight,
+                        is_in_LOS=template_floor_tile.is_in_LOS)
         tile_data[Point(x, starting_point.y)] = new_tile
     # Then the vertical leg
     for y in range(min(starting_point.y, ending_point.y), max(starting_point.y, ending_point.y) + 1):
@@ -201,7 +202,8 @@ def fill_hallway(starting_point, ending_point, template_floor_tile, tile_data):
                         visible_color=template_floor_tile.visible_color,
                         fow_color=template_floor_tile.fow_color,
                         has_been_visible=template_floor_tile.has_been_visible,
-                        movement_weight=template_floor_tile.movement_weight)
+                        movement_weight=template_floor_tile.movement_weight,
+                        is_in_LOS=template_floor_tile.is_in_LOS)
         tile_data[Point(ending_point.x, y)] = new_tile
 
 
@@ -216,7 +218,8 @@ def fill_room_with_template(room, template_tile, tile_data):
                             visible_color=template_tile.visible_color,
                             fow_color=template_tile.fow_color,
                             has_been_visible=template_tile.has_been_visible,
-                            movement_weight=template_tile.movement_weight)
+                            movement_weight=template_tile.movement_weight,
+                            is_in_LOS=template_tile.is_in_LOS)
             tile_data[Point(room_x, room_y)] = new_tile
 
 

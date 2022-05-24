@@ -23,7 +23,8 @@ class Tile:
     floor_char: str
     is_blocking_move: bool
     is_blocking_LOS: bool
-    is_visible: bool
+    is_visible: bool  # This is more restrictive than is_in_LOS, since it must also be in range/in light/etc.
+    is_in_LOS: bool
     visible_color: TermColor
     fow_color: TermColor
     has_been_visible: bool = False
@@ -181,7 +182,7 @@ def reconstruct_path(came_from: dict[Point, Point | None], start_point: Point, g
 def are_points_in_LOS(p1: Point, p2: Point, level_data: LevelData) -> bool:
     """Returns True if the line between p1 and p2 does not contain any tiles that block LOS
         This includes p1 and p2"""
-    # TODO: right now this is overly restricitve.
+    # TODO: right now this is overly restrictive.
     #   Possible fixes include casting this line to/from all the squares around each point (ick)
     #   Better is using the shadow-casting slope somehow
     #   Or keeping another property on Tiles to distinguish "within-LOS" and "visible"
@@ -195,5 +196,10 @@ def are_points_in_LOS(p1: Point, p2: Point, level_data: LevelData) -> bool:
 
     return True
 
+
+def are_points_within_distance(p1: Point, p2: Point, distance: int) -> bool:
+    abs_x = abs(p1.x - p2.x)
+    abs_y = abs(p1.y - p2.y)
+    return abs_x * abs_x + abs_y * abs_y <= distance * distance
 
 
