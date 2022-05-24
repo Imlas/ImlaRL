@@ -198,6 +198,8 @@ def are_points_in_LOS(p1: Point, p2: Point, level_data: LevelData) -> bool:
 
 
 def are_points_within_distance(p1: Point, p2: Point, distance: int) -> bool:
+    """Checks if the square of the distance between p1 and p2 is <= the square of distance
+        Using squares saves the cpu-intensive sqroot call"""
     abs_x = abs(p1.x - p2.x)
     abs_y = abs(p1.y - p2.y)
     return abs_x * abs_x + abs_y * abs_y <= distance * distance
