@@ -18,6 +18,13 @@ def draw_border(_term, origin_x, origin_y, box_width, box_height, border_char):
     print(border_char * box_width + _term.home)  # Adding the term.home avoids corner/scrolling issues
 
 
+def chunk_string(string, length):
+    """Returns a generator that splits string into smaller strings of length.
+        Will spit out the remainder at the end regardless of length"""
+    #  https://stackoverflow.com/questions/18854620/whats-the-best-way-to-split-a-string-into-fixed-length-chunks-and-work-with-the
+    return (string[0+i:length+i] for i in range(0, len(string), length))
+
+
 def entities_in_frame(all_entities: list[Entity], cam_origin_x: int, cam_origin_y: int, cam_width: int,
                       cam_height: int, visibility: bool) -> list[Entity]:
     """Returns a list of all of the entities that are within the frame of the camera with matching visibility"""
@@ -111,12 +118,45 @@ def draw_list_of_entities(entities, term, cam_origin_x, cam_origin_y, term_origi
               + term.color_rgb(*ent.display_color.value) + ent.display_char + term.normal)
 
 
-def set_message(_term, message: str):
-    """Sets the single line message at the top of the screen"""
-    # Todo: split this into two methods - one to append to the message, and another to "flush" it out to the screen
-    # Need to check how this behaves for longer messages
-    # And determine the behavior for multi-line messages/etc.
-    print(_term.move_xy(0, 0) + message)
+class TopMessage:
+    """TopMessage is a static class (I'm sure this isn't the right term) that handles pushing messages
+        to the top of the screen"""
+    # Tentative intended order of average message is "Foo attacks foo2! Foo2 takes 3 damage!"
+    #  So the attacks message should post first.
+    term = None
+    message_buffer: str = ""
+
+    @staticmethod
+    def set_terminal(_term):
+        """Sets the reference to the terminal that we'll be pushing to"""
+        TopMessage.term = _term
+
+    @staticmethod
+    def add_message(message: str):
+        """Appends 'message' to the current buffer to be displayed at the end of that update tick"""
+        TopMessage.message_buffer = TopMessage.message_buffer + " " + message
+
+    @staticmethod
+    def flush_message():
+        """Pushes the current message buffer to the screen and resets it"""
+        # Need to check how this behaves for longer messages
+        # And determine the behavior for multi-line messages/etc.
+
+        if TopMessage.term is not None:
+            _term = TopMessage.term
+            _message = TopMessage.message_buffer
+            target_width = _term.width
+            message_padding = ""
+
+            if len(_message) <= target_width:
+                message_padding = " " * (target_width - len(_message))
+            else:
+                chunks = list(chunk_string(_message, target_width - 3))
+                _message = chunks.pop(0)
+                message_padding = "..."
+
+            print(_term.move_xy(0, 0) + _message + message_padding)
+            TopMessage.message_buffer = ""
 
 
 def update_bottom_status(_term, level_data: LevelData):

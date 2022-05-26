@@ -5,11 +5,14 @@ from typing import Callable, Protocol
 
 from globalEnums import TermColor, DamageType, ItemType, Point, ImlaConstants
 from levelData import LevelData, are_points_in_LOS, a_star_search, reconstruct_path, are_points_within_distance
+from screenDrawing import TopMessage
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
 
 
 class Targetable(Protocol):
+    name: str
+
     def take_damage(self, damage: float, damage_type: DamageType, level_data: LevelData) -> float:
         ...
 
@@ -35,7 +38,9 @@ class Player:
         logging.debug(f"Taking damage, {damage = } {damage_type = } against {self.armor[damage_type]} armor")
         net_damage = damage_after_mitigation(damage, self.armor[damage_type])
         self.health -= net_damage
+        TopMessage.add_message(f"{self.name} is hit for {net_damage:0.0f} damage!")
         if self.health <= 0:
+            TopMessage.add_message(f"{self.name} dies!")
             logging.debug(f"Player health is below zero. Player is dead!")
 
         return net_damage
@@ -48,6 +53,7 @@ class Player:
 
     def default_melee_attack(self, target: Targetable, level_data: LevelData):
         # logging.debug(f"{self.name} attacks {target}!")
+        TopMessage.add_message(f"{self.name} attacks {target.name}!")
         return target.take_damage(self.attack_power * 2, DamageType.PHYSICAL, level_data)
 
 
@@ -96,8 +102,10 @@ class Monster:
         # logging.debug(f"Taking damage, {damage = } {damage_type = } against {self.armor[damage_type]} armor")
         net_damage = damage_after_mitigation(damage, self.armor[damage_type])
         self.health -= net_damage
+        TopMessage.add_message(f"{self.name} is hit for {net_damage:0.0f} damage!")
         if self.health <= 0:
             logging.debug(f"Monster health is below zero. Monster is dead!")
+            TopMessage.add_message(f"{self.name} dies!")
             # Drop items
             # Reward XP?
             # Die
@@ -121,6 +129,7 @@ class Monster:
     def attack(self, target: Targetable, damage_amount: float, damage_type: DamageType, level_data: LevelData) -> float:
         """ """
         # logging.debug(f"{self.name} attacks {target}!")
+        TopMessage.add_message(f"{self.name} attacks {target.name}! ")
         return target.take_damage(damage_amount, damage_type, level_data)
 
 
@@ -140,7 +149,6 @@ def melee_monster_update(self: Monster, level_data: LevelData):
             logging.debug(f"Monster is adjacent to player, attacking!")
             raw_damage = random.randint(self.attack_power - 1, self.attack_power + 1)
             damage_done = self.attack(player, raw_damage, DamageType.PHYSICAL, level_data)
-            # Display a some status message and/or update ui bits
             logging.debug(f"{self.name} attacked the player for {damage_done} damage!")
         else:
             # Player is not in melee range, so check if they are in LOS

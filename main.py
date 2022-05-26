@@ -31,7 +31,7 @@ from inputHandling import handle_input
 from levelData import TermColor, LevelData, dijkstra_search, \
     reconstruct_path, a_star_search
 from levelGeneration import generate_level
-from screenDrawing import draw_camera, update_bottom_status
+from screenDrawing import draw_camera, update_bottom_status, TopMessage
 from shadowCasting import refresh_visibility
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
@@ -83,6 +83,7 @@ def main():
     with term.fullscreen(), term.hidden_cursor(), term.cbreak():
         # Fun note! hidden_cursor needs to come after fullscreen
         print(term.home + term.clear, end='')
+        TopMessage.set_terminal(term)
         # Draw border
         # draw_border(term, origin_x, origin_y, box_width, box_height, border_char)
 
@@ -131,6 +132,7 @@ def main():
             # level_data.vfx = []
 
             update_bottom_status(term, level_data)
+            TopMessage.flush_message()
 
             # test_str = "X"
             # r, g, b = TermColor.RED.value

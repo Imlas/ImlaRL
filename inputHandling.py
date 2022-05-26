@@ -2,7 +2,7 @@ import logging
 
 from globalEnums import Point
 from levelData import LevelData
-from screenDrawing import set_message
+from screenDrawing import TopMessage
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
 
@@ -71,15 +71,18 @@ def handle_input(key, level_data: LevelData, term) -> bool:
 
     elif key == 'KEY_F1':
         logging.debug("F1 pressed!")
-        set_message(_term=term,
-                    message=f"{term.white_on_black}White on black {term.bright_black_on_black} Bright black on black{term.normal}")
+        TopMessage.add_message("Top message here! Reporting for duty!")
+
+        # set_message(_term=term,
+          #           message=f"{term.white_on_black}White on black {term.bright_black_on_black} Bright black on black{term.normal}")
         return False
 
     elif key == 'KEY_F2':
         logging.debug("F2 pressed!")
-        player = level_data.player
-        neighbors = level_data.get_neighbors(player.pos)
-        logging.debug(f"{neighbors = }")
+        TopMessage.add_message("This is a very long test message so long in fact that it will be longer ")
+        TopMessage.add_message("than the screen width, which seems very very long indeed. Let's see how this ")
+        TopMessage.add_message("turns out for our messaging system!")
+
         return False
 
     elif key == 'KEY_F3':
