@@ -31,7 +31,7 @@ from inputHandling import handle_input
 from levelData import TermColor, LevelData, dijkstra_search, \
     reconstruct_path, a_star_search
 from levelGeneration import generate_level
-from screenDrawing import draw_camera, update_bottom_status, TopMessage
+from screenDrawing import draw_camera, update_bottom_status, TopMessage, center_camera_on_player
 from shadowCasting import refresh_visibility
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
@@ -92,7 +92,7 @@ def main():
         # args: generation_type, height, width, room_density, room_size
 
         # tic = time.perf_counter()
-        lvlargs = {"generation_type": 1, "height": 25, "width": 118,
+        lvlargs = {"generation_type": 1, "height": 40, "width": 140,
                    "num_rooms": 20, "room_size": 9, "room_size_mod": 3}
         level_data = generate_level(**lvlargs)
         # toc = time.perf_counter()
@@ -121,6 +121,7 @@ def main():
             # refresh_octant(player.x, player.y, 200, 0, level_data)
 
             # Center camera on player (as best as possible)
+            camera_x, camera_y = center_camera_on_player(camera_width, camera_height, level_data)
 
             # Draw camera contents
             # draw_camera(term, 0, 0, 25, 10, 1, 2)

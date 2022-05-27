@@ -1,5 +1,6 @@
 import logging
 import math
+import textwrap
 
 from skimage.draw import line
 
@@ -16,13 +17,6 @@ def draw_border(_term, origin_x, origin_y, box_width, box_height, border_char):
     for i in range(origin_y + 1, box_height - 1):
         print(_term.move_xy(origin_x, i) + border_char + _term.move_xy(box_width - 1, i) + border_char)
     print(border_char * box_width + _term.home)  # Adding the term.home avoids corner/scrolling issues
-
-
-def chunk_string(string, length):
-    """Returns a generator that splits string into smaller strings of length.
-        Will spit out the remainder at the end regardless of length"""
-    #  https://stackoverflow.com/questions/18854620/whats-the-best-way-to-split-a-string-into-fixed-length-chunks-and-work-with-the
-    return (string[0+i:length+i] for i in range(0, len(string), length))
 
 
 def entities_in_frame(all_entities: list[Entity], cam_origin_x: int, cam_origin_y: int, cam_width: int,
@@ -43,6 +37,25 @@ def entities_in_frame(all_entities: list[Entity], cam_origin_x: int, cam_origin_
             entities.append(e)
 
     return entities
+
+
+def center_camera_on_player(cam_width: int, cam_height: int, level_data: LevelData) -> (int, int):
+    """Returns a tuple with new (cam_origin_x, cam_origin_y) such that the camera is centered on the player"""
+    """
+    if level_width <= cam_width:
+        new_cam_origin_x = 0
+    else:
+        new_cam_origin_x = min(level_width - cam_width, level_data.player.pos.x - int(cam_width/2))
+
+    if level_height <= cam_height:
+        new_cam_origin_y = 0
+    else:
+        new_cam_origin_y = min(level_height - cam_height, level_data.player.pos.y - int(cam_height / 2))
+    """
+    new_cam_origin_x = level_data.player.pos.x - int(cam_width / 2)
+    new_cam_origin_y = level_data.player.pos.y - int(cam_height / 2)
+
+    return new_cam_origin_x, new_cam_origin_y
 
 
 def draw_camera(term, cam_origin_x: int, cam_origin_y: int, cam_width: int, cam_height: int,
@@ -139,35 +152,40 @@ class TopMessage:
     @staticmethod
     def flush_message():
         """Pushes the current message buffer to the screen and resets it"""
+        # Todo: This still needs work
         # Need to check how this behaves for longer messages
         # And determine the behavior for multi-line messages/etc.
 
         if TopMessage.term is not None:
             _term = TopMessage.term
             _message = TopMessage.message_buffer
-            target_width = _term.width
-            message_padding = ""
+            target_width = _term.width - 3
 
-            if len(_message) <= target_width:
-                message_padding = " " * (target_width - len(_message))
-            else:
-                chunks = list(chunk_string(_message, target_width - 3))
+            chunks = textwrap.wrap(_message, width=target_width)
+            if len(chunks) > 0:
                 _message = chunks.pop(0)
-                message_padding = "..."
+                if len(chunks) > 0:
+                    _message = _message + "..."
+            else:
+                _message = ""
 
-            print(_term.move_xy(0, 0) + _message + message_padding)
+            print(_term.move_xy(0, 0) + format(_message, f'<{target_width}'))
+            # print(_term.move_xy(0, 0) + "{:<{target_width}}".format(_message))  # Both this and the above line work
             TopMessage.message_buffer = ""
 
 
 def update_bottom_status(_term, level_data: LevelData):
     player = level_data.player
-    formatted_health = math.ceil(player.health)  # Small chance of float precision errors here
-    formatted_max_health = math.ceil(player.health_max)
+    rounded_health = math.ceil(player.health)  # Small chance of float precision errors here
+    rounded_max_health = math.ceil(player.health_max)
+    formatted_health = "{:<7}".format(str(rounded_health) + "/" + str(rounded_max_health))
+    formatted_pos = "{:<7}".format(str(player.pos.x) + "," + str(player.pos.y))
 
     # Todo: break this into some extra functions? Also add a health bar
-    print(_term.normal + _term.move_xy(0, _term.height - 2) + f"Health: {_term.color_rgb(*TermColor.RED.value)}{formatted_health:02d}/{formatted_max_health:02d}" + _term.normal)
+    print(_term.normal + _term.move_xy(0,
+                                       _term.height - 2) + f"Health: {_term.color_rgb(*TermColor.RED.value)}{formatted_health}" + _term.normal)
     print(_term.magenta_on_black + _term.move_xy(0,
-                                                 _term.height - 1) + f"Player loc: {player.pos.x:02d},{player.pos.y:02d}" + "  " + _term.home + _term.normal)
+                                                 _term.height - 1) + f"Player loc: {formatted_pos}" + _term.home + _term.normal)
     # f"{number:02d}"
 
 
@@ -219,8 +237,6 @@ class OverlayMenu:
     @staticmethod
     def set_terminal(_term):
         OverlayMenu.term = _term
-
-
 
 
 def draw_line(level_data: LevelData, x1: int, y1: int, x2: int, y2: int, char: str):

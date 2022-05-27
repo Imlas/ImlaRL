@@ -124,8 +124,8 @@ def handle_input(key, level_data: LevelData, term) -> bool:
 
     elif key == 'KEY_F2':
         logging.debug("F2 pressed!")
-        TopMessage.add_message("This is a very long test message so long in fact that it will be longer ")
-        TopMessage.add_message("than the screen width, which seems very very long indeed. Let's see how this ")
+        TopMessage.add_message("This is a very long test message so long in fact that it will be longer")
+        TopMessage.add_message("than the screen width, which seems very very long indeed. Let's see how this")
         TopMessage.add_message("turns out for our messaging system!")
 
         return False
