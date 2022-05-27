@@ -27,47 +27,92 @@ def handle_input(key, level_data: LevelData, term) -> bool:
     player = level_data.player
 
     if key == 'KEY_UP' or key == '8':
+        """Move/attack up"""
         move_or_attack_pos = Point(player.pos.x + 0, player.pos.y - 1)
         move_or_attack(move_or_attack_pos, level_data)
         return True
 
     elif key == 'KEY_DOWN' or key == '2':
+        """Move/attack down"""
         move_or_attack_pos = Point(player.pos.x + 0, player.pos.y + 1)
         move_or_attack(move_or_attack_pos, level_data)
         return True
 
     elif key == 'KEY_LEFT' or key == '4':
+        """Move/attack left"""
         move_or_attack_pos = Point(player.pos.x - 1, player.pos.y + 0)
         move_or_attack(move_or_attack_pos, level_data)
         return True
 
     elif key == 'KEY_RIGHT' or key == '6':
+        """Move/attack right"""
         move_or_attack_pos = Point(player.pos.x + 1, player.pos.y + 0)
         move_or_attack(move_or_attack_pos, level_data)
         return True
 
     elif key == '1':
+        """Move/attack down-left"""
         move_or_attack_pos = Point(player.pos.x - 1, player.pos.y + 1)
         move_or_attack(move_or_attack_pos, level_data)
         return True
 
     elif key == '3':
+        """Move/attack down-right"""
         move_or_attack_pos = Point(player.pos.x + 1, player.pos.y + 1)
         move_or_attack(move_or_attack_pos, level_data)
         return True
 
     elif key == '7':
+        """Move/attack up-left"""
         move_or_attack_pos = Point(player.pos.x - 1, player.pos.y - 1)
         move_or_attack(move_or_attack_pos, level_data)
         return True
 
     elif key == '9':
+        """Move/attack up-right"""
         move_or_attack_pos = Point(player.pos.x + 1, player.pos.y - 1)
         move_or_attack(move_or_attack_pos, level_data)
         return True
 
     elif key == '5':
+        """Player wait"""
         return True
+
+    elif key == '>':
+        """Going down stairs"""
+        return False
+
+    elif key == '<':
+        """Going up stairs"""
+        return False
+
+    elif key == '?':
+        """Opens a help menu"""
+        return False
+
+    elif key == "a" or key == "A":
+        """Begins a targeted attack"""
+        return False
+
+    elif key == "f" or key == "F":
+        """Begins a ranged attack"""
+        return False
+
+    elif key == "j" or key == "J":
+        """Opens the journal/log"""
+        return False
+
+    elif key == " ":
+        """Dunno what this'll be used for yet. Maybe an alternate confirmation for attacks?"""
+        return False
+
+    elif key == "KEY_ENTER":
+        """Confirms dialogues/selects in menus"""
+        return False
+
+    elif key == "KEY_ESCAPE":
+        """Closes/cancels active menu? Maybe opens a main menu if nothing else open?"""
+        return False
 
     elif key == 'KEY_F1':
         logging.debug("F1 pressed!")

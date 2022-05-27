@@ -167,8 +167,60 @@ def update_bottom_status(_term, level_data: LevelData):
     # Todo: break this into some extra functions? Also add a health bar
     print(_term.normal + _term.move_xy(0, _term.height - 2) + f"Health: {_term.color_rgb(*TermColor.RED.value)}{formatted_health:02d}/{formatted_max_health:02d}" + _term.normal)
     print(_term.magenta_on_black + _term.move_xy(0,
-                                                 _term.height - 1) + f"Player loc: {player.pos.x:02d},{player.pos.y:02d}" + _term.home + _term.normal)
+                                                 _term.height - 1) + f"Player loc: {player.pos.x:02d},{player.pos.y:02d}" + "  " + _term.home + _term.normal)
     # f"{number:02d}"
+
+
+class OverlayMenu:
+    term = None
+    root_menu = None
+
+    def __init__(self, text: str, options: list[str] | None):
+        self.text = text
+        self.options = options
+        if options is not None:
+            self.active_option = 0  # The index of the list
+        else:
+            self.active_option = None
+
+        # I'm debating heavily on how robust of a parent/child/root relationship I need to implement with this
+        if OverlayMenu.root_menu is None:
+            OverlayMenu.root_menu = self
+
+    def close_menu(self):
+        if OverlayMenu.root_menu is self:
+            OverlayMenu.root_menu = None
+
+    def navigate_next_option(self):
+        if self.active_option is not None:
+            if self.active_option < len(self.options) - 1:
+                self.active_option += 1
+
+    def navigate_previous_option(self):
+        if self.active_option is not None:
+            if self.active_option > 0:
+                self.active_option -= 1
+
+    def return_selected_option(self):
+        if self.active_option is not None:
+            return self.options[self.active_option]
+        return None
+
+    @staticmethod
+    def draw_menu():
+        if OverlayMenu.term is None or OverlayMenu.root_menu is None:
+            return None
+
+        # Draw a border to make it clearer that it's a menu
+        # By default, let's have menus just occupy the camera area? Maybe 8-10 chars less wide
+
+        # Actually display the menu here. Just focus on static text first before designing selection bits
+
+    @staticmethod
+    def set_terminal(_term):
+        OverlayMenu.term = _term
+
+
 
 
 def draw_line(level_data: LevelData, x1: int, y1: int, x2: int, y2: int, char: str):
