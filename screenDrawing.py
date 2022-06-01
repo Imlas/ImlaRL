@@ -1,13 +1,82 @@
 import logging
 import math
 import textwrap
+from dataclasses import dataclass
 
+from blessed.terminal import Terminal
 from skimage.draw import line
 
 from globalEnums import Entity, Point, TermColor
 from levelData import LevelData
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
+
+
+@dataclass()
+class VFX:
+    """This represents a draw-able object, that is purely visual"""
+    pos: Point
+    display_char: str
+    display_color: TermColor
+    is_visible: bool
+
+
+@dataclass()
+class Camera:
+
+    cam_origin_x: int
+    cam_origin_y: int
+    cam_width: int
+    cam_height: int
+    term_origin_x: int
+    term_origin_y: int
+    term: Terminal
+
+    def center_camera_on_player(self, level_data: LevelData):
+        self.cam_origin_x = level_data.player.pos.x - int(self.cam_width / 2)
+        self.cam_origin_y = level_data.player.pos.y - int(self.cam_height / 2)
+
+    def entities_in_frame(self, all_entities: list[Entity], visibility: bool) -> list[Entity]:
+        """Returns a list of all of the entities that are within the frame of the camera with matching visibility"""
+        entities = []
+
+        if len(all_entities) == 0:
+            return entities
+
+        # logging.debug(f"{all_entities = }")
+
+        min_x, max_x = self.cam_origin_x, self.cam_origin_x + self.cam_width
+        min_y, max_y = self.cam_origin_y, self.cam_origin_y + self.cam_height
+
+        for e in all_entities:
+            if min_x <= e.pos.x <= max_x and min_y <= e.pos.y <= max_y and e.is_visible == visibility:
+                entities.append(e)
+
+        return entities
+
+    def draw_camera(self, level_data: LevelData):
+        draw_camera(self.term, self.cam_origin_x, self.cam_origin_y, self.cam_width, self.cam_height, self.term_origin_x, self.term_origin_y, level_data)
+
+    def draw_list_of_entities(self, entities: list[Entity]):
+        draw_list_of_entities(entities, self.term, self.cam_origin_x, self.cam_origin_y, self.term_origin_x, self.term_origin_y)
+
+    def resize_camera(self):
+        """Resizes the width to the term-width, and height to herm-height-3"""
+        self.cam_width = self.term.width
+        self.cam_height = self.term.height - 3
+
+
+class WindowManager:
+
+    _main_cam = None
+
+    @staticmethod
+    def set_main_camera(main_cam: Camera):
+        WindowManager._main_cam = main_cam
+
+    @staticmethod
+    def get_main_camera() -> Camera:
+        return WindowManager._main_cam
 
 
 def draw_border(_term, origin_x, origin_y, box_width, box_height, border_char):
@@ -117,12 +186,20 @@ def draw_camera(term, cam_origin_x: int, cam_origin_y: int, cam_width: int, cam_
     frame_floor_effects = filter(lambda entity: level_data.tiles[entity.pos].is_visible, frame_floor_effects)
     draw_list_of_entities(frame_floor_effects, term, cam_origin_x, cam_origin_y, term_origin_x, term_origin_y)
 
-    # Draw the vfx
-
-    # Last - draw the player on top of everything else
+    # Draw the player
     player = level_data.player
     print(term.move_xy(player.pos.x + term_origin_x - cam_origin_x, player.pos.y + term_origin_y - cam_origin_y)
           + term.color_rgb(*player.display_color.value) + player.display_char + term.normal)
+
+    # Draw the vfx
+    frame_vfx = entities_in_frame(all_entities=level_data.vfx, cam_origin_x=cam_origin_x,
+                                  cam_origin_y=cam_origin_y, cam_width=cam_width, cam_height=cam_height,
+                                  visibility=True)
+    frame_vfx = filter(lambda entity: level_data.tiles[entity.pos].is_visible, frame_vfx)
+    draw_list_of_entities(frame_vfx, term, cam_origin_x, cam_origin_y, term_origin_x, term_origin_y)
+
+    # Purge the vfx
+    level_data.vfx.clear()
 
 
 def draw_list_of_entities(entities, term, cam_origin_x, cam_origin_y, term_origin_x, term_origin_y):
@@ -152,14 +229,14 @@ class TopMessage:
     @staticmethod
     def flush_message():
         """Pushes the current message buffer to the screen and resets it"""
-        # Todo: This still needs work
+        # Todo: This still needs work to display longer messages
         # Need to check how this behaves for longer messages
         # And determine the behavior for multi-line messages/etc.
 
         if TopMessage.term is not None:
             _term = TopMessage.term
-            _message = TopMessage.message_buffer
             target_width = _term.width - 3
+            _message = TopMessage.message_buffer
 
             chunks = textwrap.wrap(_message, width=target_width)
             if len(chunks) > 0:
@@ -239,13 +316,40 @@ class OverlayMenu:
         OverlayMenu.term = _term
 
 
-def draw_line(level_data: LevelData, x1: int, y1: int, x2: int, y2: int, char: str):
+def line_as_points(p1: Point, p2: Point) -> list[Point]:
+    rr, cc = line(p1.y, p1.x, p2.y, p2.x)
+    line_points = []
+    for n in range(len(rr)):
+        line_points.append(Point(int(cc[n]), int(rr[n])))
+    return line_points
+
+
+def draw_line(level_data: LevelData, p1: Point, p2: Point, char: str, end_char: str | None, color: TermColor):
     # Adds a line to the effects "buffer"
     # The coords are in world space
     # Likely use this for stuff like targeting lines?
-    rr, cc = line(y1, x1, y2, x2)
+    # todo - modify the last tile with end_char. also, only draw first spot if the length is 0
+    rr, cc = line(p1.y, p1.x, p2.y, p2.x)
+    # rr, cc = line(y1, x1, y2, x2)
     logging.debug(f"rr: {rr}, cc: {cc}")
-    for n in range(len(rr)):
-        # e = Entity(int(cc[n]), int(rr[n]), char, EntityType.EFFECT, True, TermColor.RED)
-        logging.debug(f"Line entity at {cc[n]},{rr[n]}, {char}, {type(cc[n])}, {type(rr[n])}")
-        # level_data.effects.append(e)
+    if len(rr) == 0:
+        return
+
+    if len(rr) == 1:
+        vfx_pos = Point(int(cc[0]), int(rr[0]))
+        fx = VFX(pos=vfx_pos, display_char=end_char, display_color=color, is_visible=True)
+        level_data.vfx.append(fx)
+        return
+
+    for n in range(1, len(rr) - 1):
+        # logging.debug(f"Line entity at {cc[n]},{rr[n]}, {char}, {type(cc[n])}, {type(rr[n])}")
+        vfx_pos = Point(int(cc[n]), int(rr[n]))
+        fx = VFX(pos=vfx_pos, display_char=char, display_color=color, is_visible=True)
+        level_data.vfx.append(fx)
+    end_pos = Point(int(cc[len(cc)-1]), int(rr[len(rr)-1]))
+    draw_cursor(level_data=level_data, pos=end_pos, char=end_char, color=color)
+
+
+def draw_cursor(level_data: LevelData, pos: Point, char: str, color:TermColor):
+    fx = VFX(pos=pos, display_char=char, display_color=color, is_visible=True)
+    level_data.vfx.append(fx)

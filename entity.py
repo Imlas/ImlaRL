@@ -16,6 +16,7 @@ class Targetable(Protocol):
     def take_damage(self, damage: float, damage_type: DamageType, level_data: LevelData) -> float:
         ...
 
+# Todo: add the concept of accuracy to attacks. I'm thinking a 3d6 roll over target's evasion system
 
 @dataclass()
 class Player:
@@ -55,6 +56,11 @@ class Player:
         # logging.debug(f"{self.name} attacks {target}!")
         TopMessage.add_message(f"{self.name} attacks {target.name}!")
         return target.take_damage(self.attack_power * 2, DamageType.PHYSICAL, level_data)
+
+    def default_ranged_attack(self, target: Targetable, level_data: LevelData):
+        # Later down the line, this will rely on having a certain weapon equipped/ammo/mana?/etc.
+        TopMessage.add_message(f"{self.name} attacks {target.name} from range!")
+        return target.take_damage(self.attack_power, DamageType.PHYSICAL, level_data)
 
 
 @dataclass()

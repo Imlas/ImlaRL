@@ -31,7 +31,7 @@ from inputHandling import handle_input
 from levelData import TermColor, LevelData, dijkstra_search, \
     reconstruct_path, a_star_search
 from levelGeneration import generate_level
-from screenDrawing import draw_camera, update_bottom_status, TopMessage, center_camera_on_player
+from screenDrawing import draw_camera, update_bottom_status, TopMessage, center_camera_on_player, Camera, WindowManager
 from shadowCasting import refresh_visibility
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
@@ -44,52 +44,20 @@ def main():
 
     logging.debug("Program beginning. Terminal initialized.")
 
-    # origin_x, origin_y = 0, 1
-    # box_width, box_height = term.width, term.height - 2
-    # border_char = '#'
-
-    # level_width = 20
-    # level_height = 20
-
-    # Should eventually make sure these update when the window is resized (if available in windows....)
     camera_width = term.width
     camera_height = term.height - 3
     camera_window_origin_x, camera_window_origin_y = 0, 1  # The x, y console-coords of the top-left of the camera view
     camera_x, camera_y = 0, 0  # The x,y world-coords of the top-left of the camera
+    main_cam = Camera(cam_origin_x=camera_window_origin_x, cam_origin_y=camera_window_origin_y, cam_width=camera_width,
+                      cam_height=camera_height, term_origin_x=camera_window_origin_x,
+                      term_origin_y=camera_window_origin_y, term=term)
 
-    # level_data = []
-    # entities = []
-    # effects = []
+    WindowManager.set_main_camera(main_cam)
 
-    """
-    mydict = {'width': 80, 'height': 20, 'generation_type': 0}
-    print(mydict)
-    print(mydict.keys())
-    print(mydict.values())
-    print(mydict["width"], mydict["height"], mydict["generation_type"])
-
-    def myfunct(**kwargs):
-        print(kwargs)
-        print(kwargs.keys())
-        print(kwargs.values())
-        print(kwargs["width"], kwargs["height"], kwargs["generation_type"])
-
-    myfunct(**mydict)
-
-    return None
-    """
-
-    # clear the terminal
     with term.fullscreen(), term.hidden_cursor(), term.cbreak():
         # Fun note! hidden_cursor needs to come after fullscreen
         print(term.home + term.clear, end='')
         TopMessage.set_terminal(term)
-        # Draw border
-        # draw_border(term, origin_x, origin_y, box_width, box_height, border_char)
-
-        # Generate level data
-        # lvlargs = {"generation_type": 0, "height": 30, "width": 150}
-        # args: generation_type, height, width, room_density, room_size
 
         # tic = time.perf_counter()
         lvlargs = {"generation_type": 1, "height": 40, "width": 140,
@@ -98,7 +66,8 @@ def main():
         # toc = time.perf_counter()
         # logging.debug(f"Level generation completed after {toc-tic:0.4f} seconds")
 
-        # Generate player entity
+        # Generate fresh player entity
+        # This should likely also pull from an XML file or some such
         player_armor = {DamageType.PHYSICAL: 0, DamageType.FIRE: 0, DamageType.LIGHTNING: 0, DamageType.COLD: 0,
                         DamageType.CORROSIVE: 0}
         player = Player(name="PlayerName", pos=level_data.player_start_pos,
@@ -118,26 +87,22 @@ def main():
             refresh_visibility(player.pos.x, player.pos.y, player.sight_range, level_data)
             # toc = time.perf_counter()
             # logging.debug(f"Visibility refresh completed after {toc - tic:0.4f} seconds")
-            # refresh_octant(player.x, player.y, 200, 0, level_data)
 
+            # Resize camera (in-case window size has changed)
+            main_cam.resize_camera()
             # Center camera on player (as best as possible)
-            camera_x, camera_y = center_camera_on_player(camera_width, camera_height, level_data)
+            main_cam.center_camera_on_player(level_data)
 
             # Draw camera contents
-            # draw_camera(term, 0, 0, 25, 10, 1, 2)
-            draw_camera(term=term, cam_origin_x=camera_x, cam_origin_y=camera_y, cam_width=camera_width,
+            main_cam.draw_camera(level_data)
+            """draw_camera(term=term, cam_origin_x=camera_x, cam_origin_y=camera_y, cam_width=camera_width,
                         cam_height=camera_height,
                         term_origin_x=camera_window_origin_x, term_origin_y=camera_window_origin_y,
-                        level_data=level_data)
+                        level_data=level_data)"""
 
-            # level_data.vfx = []
-
+            # Update bottom status and push messages to top message line
             update_bottom_status(term, level_data)
             TopMessage.flush_message()
-
-            # test_str = "X"
-            # r, g, b = TermColor.RED.value
-            # print(term.move_xy(2, 10) + term.color_rgb(*TermColor.RED.value) + test_str + term.normal)
 
             # Wait for an input
             key_input = term.inkey()

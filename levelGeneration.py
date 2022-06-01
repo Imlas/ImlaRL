@@ -8,6 +8,8 @@ from levelData import LevelData, Tile
 
 logging.basicConfig(filename='Imladebug.log', filemode='w', level=logging.DEBUG)
 
+# https://pypi.org/project/perlin-noise/
+
 
 @dataclass(frozen=True)
 class Room:
@@ -149,6 +151,7 @@ def generate_level(**kwargs) -> LevelData:
         floor_items = []
         floor_effects = []
         interactables = []
+        vfx = []
 
         # For now, let's put a single orc in a room
         monster_room = random.randint(0, len(rooms) - 1)
@@ -169,7 +172,7 @@ def generate_level(**kwargs) -> LevelData:
         level_data = LevelData(tile_data=tile_data, width=map_width, height=map_height,
                                player_start_pos=player_start_point,
                                monsters=monsters, floor_items=floor_items, floor_effects=floor_effects,
-                               interactables=interactables)
+                               interactables=interactables, vfx=vfx)
 
         return level_data
     else:

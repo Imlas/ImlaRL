@@ -34,7 +34,7 @@ class Tile:
 class LevelData:
     def __init__(self, tile_data: dict[Point, Tile], height: int, width: int, player_start_pos: Point,
                  monsters: List[Entity | Updatable], floor_items: List[Entity], floor_effects: List[Entity | Updatable],
-                 interactables: List[Entity]):
+                 interactables: List[Entity], vfx: List[Entity]):
         self.tiles = tile_data
         self.width = width
         self.height = height
@@ -43,6 +43,7 @@ class LevelData:
         self.floor_items = floor_items
         self.floor_effects = floor_effects
         self.interactables = interactables
+        self.vfx = vfx
         self.player = None
 
     def is_point_in_range(self, point: Point) -> bool:
